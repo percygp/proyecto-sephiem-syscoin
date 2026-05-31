@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Sephiem Design System
+   Paleta oficial + neutros profesionales para balance visual
+   ========================================================================== */
+@theme {
+  /* Paleta oficial (acentos, no fondos) */
+  --color-royal-azure: #2351d8;
+  --color-ship-cove: #7273bc;
+  --color-deep-twilight: #01005d;
+  --color-soft-fawn: #e4bf6f;
+  --color-porcelain: #ffffff;
+
+  /* Neutros (fondos profesionales — casi negros con tinte sutil twilight) */
+  --color-ink: #0b0c14; /* fondo base más oscuro, casi negro */
+  --color-graphite: #14151f; /* fondo cards / paneles */
+  --color-slate: #1c1d29; /* fondo hover / inputs */
+  --color-mist: #2a2b3a; /* borders sutiles */
+
+  /* Estado funcional (no parte de la marca, derivados de la paleta) */
+  --color-success: #6fbf86; /* derivado neutro verde-fawn */
+  --color-warning: #e4bf6f; /* soft-fawn */
+  --color-danger: #d87273; /* ship-cove invertido cálido */
+
+  --font-sans:
+    "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial,
+    sans-serif;
+  --font-mono:
+    "JetBrains Mono", "Fira Code", "SF Mono", Monaco, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  font-family: var(--font-sans);
+  background: var(--color-ink);
+  color: var(--color-porcelain);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
