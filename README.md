@@ -44,6 +44,16 @@ npx convex env set TWILIO_AUTH_TOKEN   ...
 npx convex env set TWILIO_WHATSAPP_FROM ...
 ```
 
+## Entornos
+
+| Entorno  | Convex                | URL frontend                          |
+|----------|-----------------------|---------------------------------------|
+| Staging  | proyecto `sephiem-83362` (`exciting-dragon-400`) | Railway `sephiem-staging` *(pendiente)* |
+| Prod     | *(pendiente)*         | *(pendiente)*                         |
+
+Despliegue a staging: ver [`docs/deployment-staging.md`](docs/deployment-staging.md).
+Flujo de ramas: `feature/* → staging → main`.
+
 ## Enlaces
 
 - [Convex Docs](https://docs.convex.dev)

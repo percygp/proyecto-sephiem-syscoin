@@ -8,10 +8,19 @@ sintéticos).
 
 | Capa        | Producción                    | Staging                                       |
 |-------------|-------------------------------|-----------------------------------------------|
-| Backend     | Convex `sephiem-9b5fb` (prod) | Convex `sephiem-staging` (proyecto separado)  |
+| Backend     | Convex (proyecto prod)        | Convex `sephiem-83362` (proyecto separado) ✅ |
 | Frontend    | Railway (prod)                | Railway service `sephiem-staging`             |
 | Rama deploy | `main`                        | `staging`                                     |
-| Auth        | Privy app prod                | Privy app staging                             |
+| Auth        | Privy app prod                | Privy app staging (pendiente; hoy reusa A0)   |
+
+**Valores reales del proyecto staging `sephiem-83362`** (team `macquera20`):
+
+| Clave                  | Valor                                              |
+|------------------------|----------------------------------------------------|
+| Dashboard              | https://dashboard.convex.dev/t/macquera20/sephiem-83362 |
+| Dev deployment         | `dev:exciting-dragon-400`                           |
+| `VITE_CONVEX_URL`      | `https://exciting-dragon-400.convex.cloud`         |
+| `VITE_CONVEX_SITE_URL` | `https://exciting-dragon-400.convex.site`          |
 
 El backend corre en Convex Cloud (serverless); Railway solo sirve el frontend
 estático (build de Vite) apuntando al `VITE_CONVEX_URL` de staging.
@@ -44,21 +53,18 @@ git push -u origin staging
 
 ## 2. Convex staging (proyecto separado)
 
-Requiere login interactivo. Ejecutar localmente:
+✅ **Hecho** — proyecto `sephiem-83362` creado y schema desplegado (60+ índices):
 
 ```bash
-# 1. Autenticarse y crear/seleccionar el deployment de staging
 npx convex login
-npx convex dev --once --configure new
-#   nombre sugerido del proyecto: sephiem-staging
-
-# 2. Volcar los valores resultantes a .env.staging
-#    -> VITE_CONVEX_URL y CONVEX_DEPLOYMENT
+npx convex dev --once --configure new   # project name: sephiem -> sephiem-83362
+# Valores volcados a .env.local (dev deployment exciting-dragon-400)
 ```
 
-Para deploys no interactivos (CI / Railway) generar un **deploy key** en
-Convex Dashboard → Project `sephiem-staging` → Settings → Deploy Keys, y
-exportarlo como `CONVEX_DEPLOY_KEY`. Deploy del backend:
+Para deploys no interactivos (CI / Railway) generar un **deploy key** del
+deployment de **producción** del proyecto staging: Convex Dashboard →
+`sephiem-83362` → Settings → Deploy Keys → Production. Exportarlo como
+`CONVEX_DEPLOY_KEY`. Deploy del backend:
 
 ```bash
 CONVEX_DEPLOY_KEY=<key> npx convex deploy
@@ -132,7 +138,10 @@ prueba exitoso (con datos sintéticos de VAL-49).
 - [x] Rama `staging` creada (local)
 - [x] Plantilla de variables de entorno documentada
 - [x] Proceso de despliegue documentado (este archivo)
-- [ ] Proyecto Convex `sephiem-staging` creado — requiere `npx convex login`
+- [x] Proyecto Convex `sephiem-83362` creado + schema desplegado (60+ índices)
+- [x] `.env.staging` poblado con URLs reales del deployment
+- [ ] Deploy key de producción de `sephiem-83362` (para Railway/CI)
 - [ ] Service Railway staging — requiere cuenta Railway
 - [ ] Remoto GitHub + push de ramas — requiere repo remoto
-- [ ] Deploy de prueba end-to-end
+- [ ] App de Privy separada para staging
+- [ ] Deploy de prueba end-to-end (con datos sintéticos de VAL-49)
