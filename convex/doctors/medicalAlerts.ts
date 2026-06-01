@@ -58,7 +58,7 @@ export const createFromHermes = internalMutation({
     alertId: import("../_generated/dataModel").Id<"medicalAlerts">;
     notified: boolean;
   }> => {
-    const patient = await ctx.db.get(args.patientId);
+    const patient = await ctx.db.get("patients", args.patientId);
     if (!patient) {
       throw new ConvexError({
         code: "PATIENT_NOT_FOUND",
@@ -89,7 +89,7 @@ export const createFromHermes = internalMutation({
     });
 
     // Notificar al doctor
-    const doctor = await ctx.db.get(patient.assignedDoctorId);
+    const doctor = await ctx.db.get("doctors", patient.assignedDoctorId);
     if (doctor) {
       await ctx.runMutation(internal.notifications.notifications.create, {
         profileId: doctor.profileId,
@@ -185,7 +185,7 @@ export const acknowledgeAlert = mutation({
   returns: v.object({ success: v.boolean() }),
   handler: async (ctx, args) => {
     const doctorProfile = await requireDoctor(ctx);
-    const alert = await ctx.db.get(args.alertId);
+    const alert = await ctx.db.get("medicalAlerts", args.alertId);
     if (!alert) {
       throw new ConvexError({
         code: "ALERT_NOT_FOUND",
@@ -206,7 +206,7 @@ export const acknowledgeAlert = mutation({
     if (alert.status !== "open") {
       return { success: true }; // idempotente
     }
-    await ctx.db.patch(args.alertId, {
+    await ctx.db.patch("medicalAlerts", args.alertId, {
       status: "acknowledged",
       acknowledgedAt: Date.now(),
     });
@@ -225,7 +225,7 @@ export const resolveAlert = mutation({
   returns: v.object({ success: v.boolean() }),
   handler: async (ctx, args) => {
     const doctorProfile = await requireDoctor(ctx);
-    const alert = await ctx.db.get(args.alertId);
+    const alert = await ctx.db.get("medicalAlerts", args.alertId);
     if (!alert) {
       throw new ConvexError({
         code: "ALERT_NOT_FOUND",
@@ -245,7 +245,7 @@ export const resolveAlert = mutation({
     if (alert.status === "resolved") {
       return { success: true };
     }
-    await ctx.db.patch(args.alertId, {
+    await ctx.db.patch("medicalAlerts", args.alertId, {
       status: "resolved",
       resolvedAt: Date.now(),
       acknowledgedAt: alert.acknowledgedAt ?? Date.now(),
@@ -301,10 +301,10 @@ export const listMyAlerts = query({
 
     const result = [];
     for (const a of alerts) {
-      const patient = await ctx.db.get(a.patientId);
+      const patient = await ctx.db.get("patients", a.patientId);
       let patientName = "Paciente";
       if (patient) {
-        const profile = await ctx.db.get(patient.profileId);
+        const profile = await ctx.db.get("profiles", patient.profileId);
         patientName = profile?.name || patientName;
       }
       result.push({

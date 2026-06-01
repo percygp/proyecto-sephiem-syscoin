@@ -113,7 +113,7 @@ export const holdSlotInternal = internalMutation({
       });
     }
 
-    const slot = await ctx.db.get(args.slotId);
+    const slot = await ctx.db.get("appointmentSlots", args.slotId);
     if (!slot) {
       throw new ConvexError({ code: "SLOT_NOT_FOUND", message: "Slot no existe" });
     }
@@ -149,7 +149,7 @@ export const holdSlotInternal = internalMutation({
       });
     }
 
-    const specialist = await ctx.db.get(slot.specialistId);
+    const specialist = await ctx.db.get("marketplaceSpecialists", slot.specialistId);
     if (!specialist) {
       throw new ConvexError({
         code: "SPECIALIST_NOT_FOUND",
@@ -168,7 +168,7 @@ export const holdSlotInternal = internalMutation({
       createdAt: now,
     });
 
-    await ctx.db.patch(slot._id, {
+    await ctx.db.patch("appointmentSlots", slot._id, {
       status: "held",
       patientId: patient._id,
       heldUntil: now + HOLD_MS,
@@ -246,7 +246,7 @@ export const insertAppointmentInvoiceInternal = internalMutation({
       appointmentId: args.appointmentId,
     });
 
-    await ctx.db.patch(args.appointmentId, { invoiceId });
+    await ctx.db.patch("appointments", args.appointmentId, { invoiceId });
 
     await ctx.runMutation(internal.audit.log, {
       actorType: "system",
@@ -271,12 +271,12 @@ export async function confirmAppointmentPayment(
   txHash: string,
   amountPaidSYS: string,
 ): Promise<{ outcome: "confirmed" | "late_payment" | "skipped" }> {
-  const invoice = await ctx.db.get(invoiceId);
+  const invoice = await ctx.db.get("paymentInvoices", invoiceId);
   if (!invoice || !invoice.appointmentId) return { outcome: "skipped" };
 
-  const appointment = await ctx.db.get(invoice.appointmentId);
+  const appointment = await ctx.db.get("appointments", invoice.appointmentId);
   if (!appointment) return { outcome: "skipped" };
-  const slot = await ctx.db.get(appointment.slotId);
+  const slot = await ctx.db.get("appointmentSlots", appointment.slotId);
   const now = Date.now();
 
   const withinHold =
@@ -289,12 +289,12 @@ export async function confirmAppointmentPayment(
     slot._id === appointment.slotId;
 
   if (withinHold) {
-    await ctx.db.patch(appointment._id, {
+    await ctx.db.patch("appointments", appointment._id, {
       status: "confirmed",
       txHash,
       amountPaidSYS,
     });
-    await ctx.db.patch(slot!._id, { status: "confirmed", heldUntil: undefined });
+    await ctx.db.patch("appointmentSlots", slot._id, { status: "confirmed", heldUntil: undefined });
     await ctx.runMutation(internal.audit.log, {
       actorType: "system",
       action: "APPOINTMENT_CONFIRMED",
@@ -305,7 +305,7 @@ export async function confirmAppointmentPayment(
   }
 
   // Pago tardío / fuera de hold: NO confirma cita, NO libera slot.
-  await ctx.db.patch(invoice._id, { status: "late_payment" });
+  await ctx.db.patch("paymentInvoices", invoice._id, { status: "late_payment" });
   await ctx.runMutation(internal.audit.log, {
     actorType: "system",
     action: "APPOINTMENT_LATE_PAYMENT_REQUIRES_REVIEW",
@@ -372,26 +372,26 @@ export const handleLatePayment = mutation({
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
 
-    const appointment = await ctx.db.get(args.appointmentId);
+    const appointment = await ctx.db.get("appointments", args.appointmentId);
     if (!appointment) {
       throw new ConvexError({
         code: "APPOINTMENT_NOT_FOUND",
         message: "Cita no encontrada",
       });
     }
-    const slot = await ctx.db.get(appointment.slotId);
+    const slot = await ctx.db.get("appointmentSlots", appointment.slotId);
 
     if (args.decision === "reschedule") {
-      await ctx.db.patch(appointment._id, { status: "pending_reschedule" });
-      if (slot) await ctx.db.patch(slot._id, { status: "expired" });
+      await ctx.db.patch("appointments", appointment._id, { status: "pending_reschedule" });
+      if (slot) await ctx.db.patch("appointmentSlots", slot._id, { status: "expired" });
     } else if (args.decision === "credit") {
-      await ctx.db.patch(appointment._id, { status: "credit_issued" });
-      if (slot) await ctx.db.patch(slot._id, { status: "expired" });
+      await ctx.db.patch("appointments", appointment._id, { status: "credit_issued" });
+      if (slot) await ctx.db.patch("appointmentSlots", slot._id, { status: "expired" });
     } else {
       // reject
-      await ctx.db.patch(appointment._id, { status: "cancelled" });
+      await ctx.db.patch("appointments", appointment._id, { status: "cancelled" });
       if (slot) {
-        await ctx.db.patch(slot._id, {
+        await ctx.db.patch("appointmentSlots", slot._id, {
           status: "available",
           patientId: undefined,
           heldUntil: undefined,
@@ -425,7 +425,7 @@ export const completeAppointment = mutation({
     await requireFeatureFlag(ctx, "paymentsEnabled");
     const profile = await requireAuth(ctx);
 
-    const appointment = await ctx.db.get(args.appointmentId);
+    const appointment = await ctx.db.get("appointments", args.appointmentId);
     if (!appointment) {
       throw new ConvexError({
         code: "APPOINTMENT_NOT_FOUND",
@@ -440,8 +440,8 @@ export const completeAppointment = mutation({
     }
 
     // Autorización: el paciente dueño o el especialista de la cita (o admin).
-    const specialist = await ctx.db.get(appointment.specialistId);
-    const patient = await ctx.db.get(appointment.patientId);
+    const specialist = await ctx.db.get("marketplaceSpecialists", appointment.specialistId);
+    const patient = await ctx.db.get("patients", appointment.patientId);
     const isPatient = !!patient && patient.profileId === profile._id;
     const isSpecialist = !!specialist && specialist.profileId === profile._id;
     if (profile.role !== "admin" && !isPatient && !isSpecialist) {
@@ -458,8 +458,8 @@ export const completeAppointment = mutation({
     }
 
     const now = Date.now();
-    await ctx.db.patch(appointment._id, { status: "completed", completedAt: now });
-    await ctx.db.patch(appointment.slotId, { status: "completed" });
+    await ctx.db.patch("appointments", appointment._id, { status: "completed", completedAt: now });
+    await ctx.db.patch("appointmentSlots", appointment.slotId, { status: "completed" });
 
     const amountSYS = appointment.amountPaidSYS ?? "0";
     const { platformFeeSYS, amountToSpecialistSYS } = computePayoutSplit(amountSYS);

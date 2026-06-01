@@ -39,14 +39,14 @@ export async function resolveConversationAccess(
   patient: Doc<"patients">;
 }> {
   const profile = await requireAuth(ctx);
-  const conversation = await ctx.db.get(conversationId);
+  const conversation = await ctx.db.get("conversations", conversationId);
   if (!conversation) {
     throw new ConvexError({
       code: "CONVERSATION_NOT_FOUND",
       message: "Conversación no existe",
     });
   }
-  const patient = await ctx.db.get(conversation.patientId);
+  const patient = await ctx.db.get("patients", conversation.patientId);
   if (!patient) {
     throw new ConvexError({
       code: "PATIENT_NOT_FOUND",
@@ -61,7 +61,7 @@ export async function resolveConversationAccess(
     return { profile, conversation, patient };
   }
   if (profile.role === "doctor" && conversation.doctorId) {
-    const doctor = await ctx.db.get(conversation.doctorId);
+    const doctor = await ctx.db.get("doctors", conversation.doctorId);
     if (doctor && doctor.profileId === profile._id) {
       return { profile, conversation, patient };
     }
@@ -244,16 +244,16 @@ export const listMyConversations = query({
       if (c.type === "doctor_patient" && c.doctorId) {
         if (profile.role === "patient") {
           // Counterpart = doctor
-          const doctor = await ctx.db.get(c.doctorId);
+          const doctor = await ctx.db.get("doctors", c.doctorId);
           if (doctor) {
-            const docProfile = await ctx.db.get(doctor.profileId);
+            const docProfile = await ctx.db.get("profiles", doctor.profileId);
             counterpartName = docProfile?.name ?? "Médico";
           }
         } else {
           // Counterpart = patient
-          const patient = await ctx.db.get(c.patientId);
+          const patient = await ctx.db.get("patients", c.patientId);
           if (patient) {
-            const patProfile = await ctx.db.get(patient.profileId);
+            const patProfile = await ctx.db.get("profiles", patient.profileId);
             counterpartName = patProfile?.name ?? "Paciente";
           }
         }

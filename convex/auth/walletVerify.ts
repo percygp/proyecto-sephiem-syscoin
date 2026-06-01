@@ -73,7 +73,7 @@ export const verifyWalletSignature = action({
     let isValid = false;
     try {
       isValid = await verifyMessage({
-        address: args.walletAddress as `0x${string}`,
+        address: args.walletAddress,
         message: args.message,
         signature: args.signature as `0x${string}`,
       });
@@ -143,7 +143,7 @@ export const consumeNonceAndSaveWallet = internalMutation({
     }
     if (nonceRecord.expiresAt < now) {
       // Limpiar el nonce expirado antes de lanzar
-      await ctx.db.delete(nonceRecord._id);
+      await ctx.db.delete("walletNonces", nonceRecord._id);
       throw new ConvexError({
         code: "NONCE_EXPIRED",
         message: "Nonce expiró. Solicita uno nuevo.",
@@ -157,7 +157,7 @@ export const consumeNonceAndSaveWallet = internalMutation({
     }
 
     // b. Single-use: borrar nonce inmediatamente
-    await ctx.db.delete(nonceRecord._id);
+    await ctx.db.delete("walletNonces", nonceRecord._id);
 
     // c. Crear/obtener profile (helper A7 — by_tokenIdentifier es único)
     const profile = await findExistingOrNull(
@@ -181,7 +181,7 @@ export const consumeNonceAndSaveWallet = internalMutation({
     } else {
       profileId = profile._id;
       // d. Patch walletAddress verificada
-      await ctx.db.patch(profile._id, { walletAddress: args.walletAddress });
+      await ctx.db.patch("profiles", profile._id, { walletAddress: args.walletAddress });
     }
 
     // e. AuditLog WALLET_VERIFIED — vía módulo único (A6)

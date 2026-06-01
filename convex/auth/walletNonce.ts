@@ -55,7 +55,7 @@ export const requestWalletNonce = mutation({
 
     // Si el existente expiró, borrarlo antes de insertar el nuevo.
     if (existing && existing.expiresAt <= now) {
-      await ctx.db.delete(existing._id);
+      await ctx.db.delete("walletNonces", existing._id);
     }
 
     const nonce = crypto.randomUUID();

@@ -75,7 +75,7 @@ export const createMockInvoice = internalMutation({
     invoiceCode: string;
     derivedAddress: string;
   }> => {
-    const patient = await ctx.db.get(args.patientId);
+    const patient = await ctx.db.get("patients", args.patientId);
     if (!patient) {
       throw new ConvexError({
         code: "PATIENT_NOT_FOUND",
@@ -160,7 +160,7 @@ export const simulatePayment = internalMutation({
     status: string;
     duplicate: boolean;
   }> => {
-    const invoice = await ctx.db.get(args.invoiceId);
+    const invoice = await ctx.db.get("paymentInvoices", args.invoiceId);
     if (!invoice) {
       throw new ConvexError({
         code: "INVOICE_NOT_FOUND",

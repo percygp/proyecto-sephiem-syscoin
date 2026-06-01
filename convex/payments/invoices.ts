@@ -278,12 +278,12 @@ export const getInvoiceDetail = query({
     const profile = await getCallerProfile(ctx);
     if (!profile) return null;
 
-    const invoice = await ctx.db.get(args.invoiceId);
+    const invoice = await ctx.db.get("paymentInvoices", args.invoiceId);
     if (!invoice) return null;
 
     // RBAC: el invoice debe ser del paciente caller, o admin
     if (profile.role !== "admin") {
-      const patient = await ctx.db.get(invoice.patientId);
+      const patient = await ctx.db.get("patients", invoice.patientId);
       if (!patient || patient.profileId !== profile._id) return null;
     }
 

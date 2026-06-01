@@ -109,7 +109,7 @@ export const listMyPatients = query({
     // Enriquecer cada paciente con datos de su profile.
     const result = [];
     for (const p of patients) {
-      const pProfile = await ctx.db.get(p.profileId);
+      const pProfile = await ctx.db.get("profiles", p.profileId);
       if (!pProfile) continue;
       result.push({
         _id: p._id,
@@ -190,7 +190,7 @@ export const getPatientDetail = query({
   handler: async (ctx, args) => {
     // RBAC: solo doctor asignado o admin pueden ver
     const { patient } = await assertPatientAccess(ctx, args.patientId);
-    const profile = await ctx.db.get(patient.profileId);
+    const profile = await ctx.db.get("profiles", patient.profileId);
     if (!profile) {
       // No debería pasar: defensa por integridad
       throw new Error("Profile del paciente no encontrado");

@@ -39,6 +39,7 @@ function usePrivyConvexAuth() {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 function ConvexWithPrivy({ children }: { children: React.ReactNode }) {
   return (
     <ConvexProviderWithAuth client={convex} useAuth={usePrivyConvexAuth}>

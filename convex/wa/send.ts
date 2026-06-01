@@ -13,9 +13,9 @@ const WA_FAILURE_WINDOW_MS = 60 * 60 * 1000;
 export const _getPatientProfile = internalQuery({
   args: { patientId: v.id("patients") },
   handler: async (ctx, args) => {
-    const patient = await ctx.db.get(args.patientId);
+    const patient = await ctx.db.get("patients", args.patientId);
     if (!patient) return null;
-    const profile = await ctx.db.get(patient.profileId);
+    const profile = await ctx.db.get("profiles", patient.profileId);
     if (!profile) return null;
     return { patient, profile };
   },
@@ -26,6 +26,7 @@ export const _hasWaConsent = internalQuery({
   handler: async (ctx, args) => {
     const consent = await ctx.db
       .query("consents")
+      // eslint-disable-next-line @convex-dev/no-filter-in-query
       .filter((q) =>
         q.and(
           q.eq(q.field("patientId"), args.patientId),
@@ -53,9 +54,9 @@ export const _countRecentFailures = internalQuery({
 export const _getPatientName = internalQuery({
   args: { patientId: v.id("patients") },
   handler: async (ctx, args) => {
-    const patient = await ctx.db.get(args.patientId);
+    const patient = await ctx.db.get("patients", args.patientId);
     if (!patient) return null;
-    const profile = await ctx.db.get(patient.profileId);
+    const profile = await ctx.db.get("profiles", patient.profileId);
     return profile?.name ?? null;
   },
 });

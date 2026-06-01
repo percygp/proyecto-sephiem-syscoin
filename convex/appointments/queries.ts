@@ -61,7 +61,7 @@ const appointmentSummary = v.object({
 });
 
 async function toSummary(ctx: { db: any }, a: Doc<"appointments">) {
-  const specialist = await ctx.db.get(a.specialistId);
+  const specialist = await ctx.db.get("marketplaceSpecialists", a.specialistId);
   return {
     _id: a._id,
     specialistId: a.specialistId,
@@ -102,12 +102,12 @@ export const getAppointmentById = query({
   returns: v.union(appointmentSummary, v.null()),
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
-    const appt = await ctx.db.get(args.appointmentId);
+    const appt = await ctx.db.get("appointments", args.appointmentId);
     if (!appt) return null;
 
     if (profile.role !== "admin") {
-      const patient = await ctx.db.get(appt.patientId);
-      const specialist = await ctx.db.get(appt.specialistId);
+      const patient = await ctx.db.get("patients", appt.patientId);
+      const specialist = await ctx.db.get("marketplaceSpecialists", appt.specialistId);
       const isOwner = !!patient && patient.profileId === profile._id;
       const isSpecialist = !!specialist && specialist.profileId === profile._id;
       if (!isOwner && !isSpecialist) return null;

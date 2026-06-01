@@ -71,7 +71,7 @@ export const grantConsent = mutation({
 
     let consentId: import("../_generated/dataModel").Id<"consents">;
     if (existing) {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("consents", existing._id, {
         granted: true,
         grantedAt: now,
         revokedAt: undefined,
@@ -130,7 +130,7 @@ export const revokeConsent = mutation({
       });
     }
 
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("consents", existing._id, {
       granted: false,
       revokedAt: Date.now(),
     });

@@ -12,7 +12,7 @@ export const listDoctors = query({
     const doctors = await ctx.db.query("doctors").collect();
     const result = [];
     for (const d of doctors) {
-      const profile = await ctx.db.get(d.profileId);
+      const profile = await ctx.db.get("profiles", d.profileId);
       if (!profile) continue;
       const patientCount = await ctx.db
         .query("patients")
@@ -48,7 +48,7 @@ export const inviteDoctor = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
-    const profile = await ctx.db.get(args.profileId);
+    const profile = await ctx.db.get("profiles", args.profileId);
     if (!profile) {
       throw new ConvexError({ code: "PROFILE_NOT_FOUND", message: "Profile no existe" });
     }
@@ -60,7 +60,7 @@ export const inviteDoctor = mutation({
       "Este profile ya es doctor",
     );
     const previousRole = profile.role;
-    await ctx.db.patch(args.profileId, { role: "doctor" });
+    await ctx.db.patch("profiles", args.profileId, { role: "doctor" });
     const doctorId = await ctx.db.insert("doctors", {
       profileId: args.profileId,
       specialty: args.specialty.trim(),
@@ -87,13 +87,13 @@ export const deactivateDoctor = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
-    const doctor = await ctx.db.get(args.doctorId);
+    const doctor = await ctx.db.get("doctors", args.doctorId);
     if (!doctor) {
       throw new ConvexError({ code: "DOCTOR_NOT_FOUND", message: "Doctor no existe" });
     }
-    const profile = await ctx.db.get(doctor.profileId);
+    const profile = await ctx.db.get("profiles", doctor.profileId);
     if (profile) {
-      await ctx.db.patch(doctor.profileId, { isActive: false });
+      await ctx.db.patch("profiles", doctor.profileId, { isActive: false });
     }
     await ctx.runMutation(internal.audit.log, {
       actorProfileId: admin._id,
@@ -111,9 +111,9 @@ export const getDoctorStats = query({
   args: { doctorId: v.id("doctors") },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const doctor = await ctx.db.get(args.doctorId);
+    const doctor = await ctx.db.get("doctors", args.doctorId);
     if (!doctor) return null;
-    const profile = await ctx.db.get(doctor.profileId);
+    const profile = await ctx.db.get("profiles", doctor.profileId);
     const patients = await ctx.db
       .query("patients")
       .withIndex("by_assignedDoctorId", (q) => q.eq("assignedDoctorId", args.doctorId))

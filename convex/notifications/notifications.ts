@@ -246,7 +246,7 @@ export const markNotificationRead = mutation({
   returns: v.object({ success: v.boolean() }),
   handler: async (ctx, args) => {
     const profile = await requireAuth(ctx);
-    const notification = await ctx.db.get(args.notificationId);
+    const notification = await ctx.db.get("notifications", args.notificationId);
     if (!notification) {
       throw new ConvexError({
         code: "NOT_FOUND",
@@ -262,7 +262,7 @@ export const markNotificationRead = mutation({
     if (notification.isRead) {
       return { success: true };
     }
-    await ctx.db.patch(args.notificationId, {
+    await ctx.db.patch("notifications", args.notificationId, {
       isRead: true,
       readAt: Date.now(),
     });
@@ -289,7 +289,7 @@ export const markAllNotificationsRead = mutation({
       .take(100);
 
     for (const n of unread) {
-      await ctx.db.patch(n._id, { isRead: true, readAt: now });
+      await ctx.db.patch("notifications", n._id, { isRead: true, readAt: now });
     }
     return { marked: unread.length };
   },

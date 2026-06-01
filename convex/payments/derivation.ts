@@ -45,7 +45,7 @@ export const getNextDerivationIndex = internalMutation({
     const current = setting.value;
     const next = current + 1;
 
-    await ctx.db.patch(setting._id, {
+    await ctx.db.patch("systemSettings", setting._id, {
       value: next,
       updatedAt: Date.now(),
     });

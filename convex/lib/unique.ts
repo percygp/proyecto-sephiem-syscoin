@@ -79,6 +79,7 @@ export async function findExistingOrNull<T extends TableNames>(
   table: T,
   indexName: string,
   rangeFn: IndexRangeFn,
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 ): Promise<any | null> {
   return await (ctx.db.query(table) as any)
     .withIndex(indexName, rangeFn)

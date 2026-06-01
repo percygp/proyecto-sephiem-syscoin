@@ -9,8 +9,8 @@ export const listInvoices = query({
     const invoices = await ctx.db.query("paymentInvoices").collect();
     const result = [];
     for (const inv of invoices) {
-      const patient = await ctx.db.get(inv.patientId);
-      const profile = patient ? await ctx.db.get(patient.profileId) : null;
+      const patient = await ctx.db.get("patients", inv.patientId);
+      const profile = patient ? await ctx.db.get("profiles", patient.profileId) : null;
       const payments = await ctx.db
         .query("payments")
         .withIndex("by_invoiceId", (q) => q.eq("invoiceId", inv._id))
@@ -42,10 +42,10 @@ export const getInvoiceDetail = query({
   args: { invoiceId: v.id("paymentInvoices") },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const invoice = await ctx.db.get(args.invoiceId);
+    const invoice = await ctx.db.get("paymentInvoices", args.invoiceId);
     if (!invoice) return null;
-    const patient = await ctx.db.get(invoice.patientId);
-    const profile = patient ? await ctx.db.get(patient.profileId) : null;
+    const patient = await ctx.db.get("patients", invoice.patientId);
+    const profile = patient ? await ctx.db.get("profiles", patient.profileId) : null;
     const payments = await ctx.db
       .query("payments")
       .withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.invoiceId))

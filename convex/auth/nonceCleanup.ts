@@ -30,7 +30,7 @@ export const pruneExpiredNonces = internalMutation({
     let allExpired = candidates.length === BATCH_SIZE;
     for (const nonce of candidates) {
       if (nonce.expiresAt < now) {
-        await ctx.db.delete(nonce._id);
+        await ctx.db.delete("walletNonces", nonce._id);
         deleted++;
       } else {
         // Los siguientes están todavía vigentes (orden asc por expiresAt)

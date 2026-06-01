@@ -68,7 +68,7 @@ export const createTreatment = mutation({
 
     // Si se referencia una consultationId, validar que pertenezca al patient
     if (args.consultationId) {
-      const cons = await ctx.db.get(args.consultationId);
+      const cons = await ctx.db.get("consultations", args.consultationId);
       if (!cons || cons.patientId !== patient._id) {
         throw new ConvexError({
           code: "CONSULTATION_MISMATCH",
@@ -117,7 +117,7 @@ export const updateTreatmentStatus = mutation({
   handler: async (ctx, args) => {
     const doctorProfile = await requireDoctor(ctx);
 
-    const treatment = await ctx.db.get(args.treatmentId);
+    const treatment = await ctx.db.get("treatments", args.treatmentId);
     if (!treatment) {
       throw new ConvexError({
         code: "TREATMENT_NOT_FOUND",
@@ -136,7 +136,7 @@ export const updateTreatmentStatus = mutation({
     const patch: Record<string, unknown> = { status: args.status };
     if (args.endDate !== undefined) patch.endDate = args.endDate;
     if (args.notes !== undefined) patch.notes = args.notes;
-    await ctx.db.patch(args.treatmentId, patch);
+    await ctx.db.patch("treatments", args.treatmentId, patch);
 
     await ctx.runMutation(internal.audit.log, {
       actorProfileId: doctorProfile._id,

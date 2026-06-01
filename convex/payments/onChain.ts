@@ -49,7 +49,7 @@ export const recordPayment = internalMutation({
     duplicate: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const invoice = await ctx.db.get(args.invoiceId);
+    const invoice = await ctx.db.get("paymentInvoices", args.invoiceId);
     if (!invoice) {
       throw new ConvexError({
         code: "INVOICE_NOT_FOUND",
@@ -160,7 +160,7 @@ export const updateConfirmations = internalMutation({
       payment.status === "confirmed"
     ) {
       patch.status = "confirming";
-      await ctx.db.patch(payment._id, patch);
+      await ctx.db.patch("payments", payment._id, patch);
       return { status: "confirming", activated: false };
     }
 
@@ -170,12 +170,12 @@ export const updateConfirmations = internalMutation({
       payment.status === "confirming"
     ) {
       patch.status = "confirmed";
-      await ctx.db.patch(payment._id, patch);
+      await ctx.db.patch("payments", payment._id, patch);
       const activated = await finalizePaymentInternal(ctx, payment._id);
       return { status: "confirmed", activated };
     }
 
-    await ctx.db.patch(payment._id, patch);
+    await ctx.db.patch("payments", payment._id, patch);
     return { status: payment.status, activated: false };
   },
 });
@@ -185,12 +185,12 @@ async function finalizePaymentInternal(
   ctx: any,
   paymentId: any,
 ): Promise<boolean> {
-  const payment = await ctx.db.get(paymentId);
+  const payment = await ctx.db.get("payments", paymentId);
   if (!payment) return false;
-  const invoice = await ctx.db.get(payment.invoiceId);
+  const invoice = await ctx.db.get("invoices", payment.invoiceId);
   if (!invoice) return false;
 
-  await ctx.db.patch(paymentId, { confirmedAt: Date.now() });
+  await ctx.db.patch("payments", paymentId, { confirmedAt: Date.now() });
 
   const cmp = compareDecimal(payment.amountReceived, invoice.amountExpected);
 
@@ -206,7 +206,7 @@ async function finalizePaymentInternal(
     activate = true;
   }
 
-  await ctx.db.patch(invoice._id, { status: invoiceStatus });
+  await ctx.db.patch("invoices", invoice._id, { status: invoiceStatus });
 
   await ctx.runMutation(internal.audit.log, {
     actorType: "system",
@@ -230,7 +230,7 @@ async function finalizePaymentInternal(
 
   if (!activate) return false;
 
-  const patient = await ctx.db.get(invoice.patientId);
+  const patient = await ctx.db.get("patients", invoice.patientId);
   if (!patient) return false;
 
   const now = Date.now();
@@ -241,7 +241,7 @@ async function finalizePaymentInternal(
       : now;
   const newExpiry = base + invoice.subscriptionMonths * monthMs;
 
-  await ctx.db.patch(patient._id, {
+  await ctx.db.patch("patients", patient._id, {
     subscriptionStatus: "active",
     subscriptionExpiresAt: newExpiry,
   });

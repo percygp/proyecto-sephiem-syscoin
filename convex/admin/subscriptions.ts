@@ -11,9 +11,9 @@ export const listSubscriptions = query({
     const patients = await ctx.db.query("patients").collect();
     const result = [];
     for (const p of patients) {
-      const profile = await ctx.db.get(p.profileId);
-      const doctor = p.assignedDoctorId ? await ctx.db.get(p.assignedDoctorId) : null;
-      const doctorProfile = doctor ? await ctx.db.get(doctor.profileId) : null;
+      const profile = await ctx.db.get("profiles", p.profileId);
+      const doctor = p.assignedDoctorId ? await ctx.db.get("doctors", p.assignedDoctorId) : null;
+      const doctorProfile = doctor ? await ctx.db.get("profiles", doctor.profileId) : null;
       result.push({
         patientId: p._id,
         profileName: profile?.name ?? null,
@@ -40,11 +40,11 @@ export const cancelSubscription = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
-    const patient = await ctx.db.get(args.patientId);
+    const patient = await ctx.db.get("patients", args.patientId);
     if (!patient) {
       throw new ConvexError({ code: "PATIENT_NOT_FOUND", message: "Paciente no existe" });
     }
-    await ctx.db.patch(args.patientId, { subscriptionStatus: "suspended" });
+    await ctx.db.patch("patients", args.patientId, { subscriptionStatus: "suspended" });
     await ctx.runMutation(internal.audit.log, {
       actorProfileId: admin._id,
       actorType: "admin",
@@ -64,14 +64,14 @@ export const extendSubscription = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
-    const patient = await ctx.db.get(args.patientId);
+    const patient = await ctx.db.get("patients", args.patientId);
     if (!patient) {
       throw new ConvexError({ code: "PATIENT_NOT_FOUND", message: "Paciente no existe" });
     }
     const now = Date.now();
     const currentExpiry = patient.subscriptionExpiresAt ?? now;
     const newExpiry = currentExpiry + args.months * 30 * 24 * 60 * 60 * 1000;
-    await ctx.db.patch(args.patientId, {
+    await ctx.db.patch("patients", args.patientId, {
       subscriptionStatus: "active",
       subscriptionExpiresAt: newExpiry,
     });

@@ -45,7 +45,7 @@ export const reconcilePayments = internalMutation({
     let discrepancies = 0;
 
     for (const payment of batch) {
-      const invoice = await ctx.db.get(payment.invoiceId);
+      const invoice = await ctx.db.get("paymentInvoices", payment.invoiceId);
 
       // Validaciones de consistencia interna
       const invoiceOk = invoice !== null;
@@ -54,7 +54,7 @@ export const reconcilePayments = internalMutation({
       const amountValid = !Number.isNaN(parseFloat(payment.amountReceived));
 
       if (invoiceOk && patientMatches && amountValid) {
-        await ctx.db.patch(payment._id, { reconciled: true });
+        await ctx.db.patch("payments", payment._id, { reconciled: true });
         reconciled++;
       } else {
         // Discrepancia: dejamos sin conciliar para revisión manual.

@@ -57,7 +57,7 @@ export const pruneOldAuditLogs = internalMutation({
     let hitNonExpired = false;
     for (const logEntry of batch) {
       if (logEntry._creationTime < cutoff) {
-        await ctx.db.delete(logEntry._id);
+        await ctx.db.delete("auditLogs", logEntry._id);
         deleted++;
       } else {
         // Ordenados asc: el primero no vencido implica que el resto tampoco.

@@ -193,7 +193,7 @@ export const updatePRGCheck = mutation({
       patch.approvedByProfileId = admin._id;
       patch.approvedAt = now;
     }
-    await ctx.db.patch(check._id, patch);
+    await ctx.db.patch("productionReadinessChecks", check._id, patch);
 
     // AuditLog: el action depende del nuevo status
     const auditAction =
@@ -262,7 +262,7 @@ export const enableProduction = mutation({
         message: "systemSettings.productionEnabled no existe. Ejecuta seed:seedAll.",
       });
     }
-    await ctx.db.patch(flag._id, {
+    await ctx.db.patch("systemSettings", flag._id, {
       value: true,
       updatedAt: Date.now(),
       updatedByProfileId: admin._id,
@@ -322,7 +322,7 @@ export const disableProduction = mutation({
         message: "systemSettings.productionEnabled no existe.",
       });
     }
-    await ctx.db.patch(flag._id, {
+    await ctx.db.patch("systemSettings", flag._id, {
       value: false,
       updatedAt: now,
       updatedByProfileId: admin._id,
@@ -334,7 +334,7 @@ export const disableProduction = mutation({
       .withIndex("by_key", (q) => q.eq("key", "productionDisabledReason"))
       .unique();
     if (reasonSetting && reasonSetting.key === "productionDisabledReason") {
-      await ctx.db.patch(reasonSetting._id, {
+      await ctx.db.patch("systemSettings", reasonSetting._id, {
         value: trimmed,
         updatedAt: now,
         updatedByProfileId: admin._id,

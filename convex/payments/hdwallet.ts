@@ -27,7 +27,7 @@ import { internalAction } from "../_generated/server";
 import { ConvexError } from "convex/values";
 import { HDKey } from "@scure/bip32";
 import { keccak_256 } from "@noble/hashes/sha3";
-
+import { secp256k1 } from "@noble/curves/secp256k1";
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper puro: deriva address EVM desde xpub + index
 // ─────────────────────────────────────────────────────────────────────────────
@@ -65,7 +65,6 @@ function computeEvmAddress(compressedPubKey: Uint8Array): string {
   // descomprimir. Usamos point recovery via @noble/curves.
   // @scure/bip32 lo incluye como dep. Lo importamos dinámicamente para evitar
   // problemas si el peer no está presente.
-  const { secp256k1 } = require("@noble/curves/secp256k1");
   const point = secp256k1.ProjectivePoint.fromHex(compressedPubKey);
   const uncompressed = point.toRawBytes(false); // 65 bytes con 0x04 prefix
   const xy = uncompressed.slice(1); // 64 bytes

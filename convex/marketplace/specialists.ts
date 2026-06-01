@@ -99,7 +99,7 @@ export const approveSpecialist = mutation({
     await requireFeatureFlag(ctx, "marketplaceEnabled");
     const admin = await requireAdmin(ctx);
 
-    const specialist = await ctx.db.get(args.specialistId);
+    const specialist = await ctx.db.get("marketplaceSpecialists", args.specialistId);
     if (!specialist) {
       throw new ConvexError({
         code: "SPECIALIST_NOT_FOUND",
@@ -107,7 +107,7 @@ export const approveSpecialist = mutation({
       });
     }
 
-    await ctx.db.patch(specialist._id, {
+    await ctx.db.patch("marketplaceSpecialists", specialist._id, {
       isVerifiedByAdmin: true,
       updatedAt: Date.now(),
     });
@@ -138,7 +138,7 @@ export const getSpecialistPayoutWallet = mutation({
     await requireFeatureFlag(ctx, "marketplaceEnabled");
     const caller = await requireAuth(ctx);
 
-    const specialist = await ctx.db.get(args.specialistId);
+    const specialist = await ctx.db.get("marketplaceSpecialists", args.specialistId);
     if (!specialist) {
       throw new ConvexError({
         code: "SPECIALIST_NOT_FOUND",
@@ -268,11 +268,11 @@ export const getSpecialistDetail = query({
     v.null(),
   ),
   handler: async (ctx, args) => {
-    const specialist = await ctx.db.get(args.specialistId);
+    const specialist = await ctx.db.get("marketplaceSpecialists", args.specialistId);
     // Solo visible si existe y está verificado.
     if (!specialist || !specialist.isVerifiedByAdmin) return null;
 
-    const profile = await ctx.db.get(specialist.profileId);
+    const profile = await ctx.db.get("profiles", specialist.profileId);
     const { rating } = await computeSpecialistRating(ctx, specialist._id);
 
     return {

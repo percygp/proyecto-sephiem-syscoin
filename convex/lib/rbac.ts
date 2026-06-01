@@ -137,7 +137,7 @@ export async function assertPatientAccess(
   patient: Doc<"patients">;
 }> {
   const caller = await requireAuth(ctx);
-  const patient = await ctx.db.get(patientId);
+  const patient = await ctx.db.get("patients", patientId);
   if (!patient) {
     throw new ConvexError({
       code: "PATIENT_NOT_FOUND",
@@ -169,7 +169,7 @@ export async function assertPatientAccess(
         message: "El paciente no tiene médico asignado",
       });
     }
-    const doctor = await ctx.db.get(patient.assignedDoctorId);
+    const doctor = await ctx.db.get("doctors", patient.assignedDoctorId);
     if (!doctor || doctor.profileId !== caller._id) {
       throw new ConvexError({
         code: "FORBIDDEN",
@@ -182,6 +182,7 @@ export async function assertPatientAccess(
   // Cualquier otro rol imposible (typescript ya cubre el caso)
   throw new ConvexError({
     code: "FORBIDDEN",
+    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
     message: `Rol '${caller.role}' no autorizado`,
   });
 }

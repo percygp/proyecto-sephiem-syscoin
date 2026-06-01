@@ -14,14 +14,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const _getConversation = internalQuery({
   args: { conversationId: v.id("conversations") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.conversationId);
+    return await ctx.db.get("conversations", args.conversationId);
   },
 });
 
 export const _getPatientMessage = internalQuery({
   args: { messageId: v.id("messages") },
   handler: async (ctx, args) => {
-    const msg = await ctx.db.get(args.messageId);
+    const msg = await ctx.db.get("messages", args.messageId);
     if (!msg || msg.senderType !== "patient") return null;
     return msg;
   },
@@ -329,7 +329,7 @@ export const migrateToV2 = internalMutation({
     let count = 0;
     for (const s of states) {
       if (s.promptVersion === "v2.0.0") continue;
-      await ctx.db.patch(s._id, { promptVersion: "v2.0.0", updatedAt: Date.now() });
+      await ctx.db.patch("hermesState", s._id, { promptVersion: "v2.0.0", updatedAt: Date.now() });
       count++;
     }
     return count;
@@ -346,7 +346,7 @@ export const _sendHermesMessage = internalMutation({
     content: v.string(),
   },
   handler: async (ctx, args) => {
-    const conversation = await ctx.db.get(args.conversationId);
+    const conversation = await ctx.db.get("conversations", args.conversationId);
     if (!conversation || conversation.type !== "hermes_patient") return;
     const text = args.content.trim().slice(0, 4000);
     if (text.length === 0) return;
@@ -359,7 +359,7 @@ export const _sendHermesMessage = internalMutation({
       isRead: false,
       sentAt: now,
     });
-    await ctx.db.patch(args.conversationId, { lastMessageAt: now });
+    await ctx.db.patch("conversations", args.conversationId, { lastMessageAt: now });
   },
 });
 
@@ -375,7 +375,7 @@ export const _updateHermesState = internalMutation({
       .withIndex("by_patientId", (q) => q.eq("patientId", args.patientId))
       .unique();
     if (!existing) return;
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("hermesState", existing._id, {
       contextSummary: args.contextSummary.slice(0, 2000),
       totalInteractions: args.totalInteractions,
       updatedAt: Date.now(),
@@ -396,7 +396,7 @@ export const _updateHermesStateDaily = internalMutation({
       .withIndex("by_patientId", (q) => q.eq("patientId", args.patientId))
       .unique();
     if (!existing) return;
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("hermesState", existing._id, {
       contextSummary: args.contextSummary.slice(0, 2000),
       totalInteractions: args.totalInteractions,
       lastCheckinAt: args.lastCheckinAt,

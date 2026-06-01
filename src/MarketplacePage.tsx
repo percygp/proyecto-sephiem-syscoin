@@ -253,6 +253,7 @@ function SpecialistDetail({
         appointmentId: r.appointmentId,
         derivedAddress: r.derivedAddress,
         amountExpected: r.amountExpected,
+        // eslint-disable-next-line react-hooks/purity
         startedAt: Date.now(),
       });
     } catch (err) {
@@ -326,7 +327,7 @@ function SpecialistDetail({
                   <button
                     key={s._id}
                     disabled={busy}
-                    onClick={() => reserve(s._id)}
+                    onClick={() => void reserve(s._id)}
                     className="text-xs px-2 py-2 rounded-lg border border-mist hover:border-royal-azure/60 text-porcelain/80 disabled:opacity-40"
                   >
                     {fmtDateTime(s.startTime)}
@@ -466,7 +467,7 @@ function AppointmentsHistory() {
               <div className="font-medium">{a.specialty}</div>
               <div className="text-xs text-porcelain/50">{fmtDateTime(a.startTime)}</div>
             </div>
-            <StatusPill status={a.status as ApptStatus} />
+            <StatusPill status={a.status} />
           </div>
           <div className="mt-2 flex items-center justify-between text-xs text-porcelain/60">
             <span>
@@ -476,7 +477,7 @@ function AppointmentsHistory() {
             {a.status === "confirmed" && (
               <button
                 disabled={busyId === a._id}
-                onClick={() => onComplete(a._id)}
+                onClick={() => void onComplete(a._id)}
                 className="text-xs px-3 py-1.5 rounded-lg bg-royal-azure/15 text-royal-azure border border-royal-azure/40 hover:bg-royal-azure/25 disabled:opacity-40"
               >
                 {busyId === a._id ? "…" : "Completar cita"}

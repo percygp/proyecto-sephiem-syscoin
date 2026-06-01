@@ -26,7 +26,7 @@ export function DoctorDashboard() {
 
   return (
     <div className="h-screen flex flex-col bg-ink text-porcelain overflow-hidden">
-      <DoctorHeader doctor={doctor} onLogout={logout} />
+      <DoctorHeader doctor={doctor} onLogout={() => void logout() } />
       <div className="flex-1 flex overflow-hidden">
         <PatientsSidebar
           patients={patients}
@@ -539,7 +539,7 @@ function NewConsultationForm({ patientId }: { patientId: Id<"patients"> }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 p-3 border border-mist rounded bg-graphite/50">
+    <form onSubmit={(e)=> { void handleSubmit(e); }} className="mt-3 p-3 border border-mist rounded bg-graphite/50">
       <p className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono mb-2">
         ➕ Nueva consulta
       </p>
@@ -603,7 +603,7 @@ function NewTreatmentForm({ patientId }: { patientId: Id<"patients"> }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 p-3 border border-mist rounded bg-graphite/50">
+    <form onSubmit={(e)=> { void handleSubmit(e); }} className="mt-3 p-3 border border-mist rounded bg-graphite/50">
       <p className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono mb-2">
         ➕ Nuevo tratamiento
       </p>

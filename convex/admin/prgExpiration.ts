@@ -48,7 +48,7 @@ export const prgExpirationCheck = internalMutation({
       if (Number.isNaN(expiresTs)) continue;
 
       if (expiresTs < now) {
-        await ctx.db.patch(check._id, {
+        await ctx.db.patch("productionReadinessChecks", check._id, {
           status: "expired",
         });
 

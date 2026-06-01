@@ -86,7 +86,7 @@ export const completeOnboarding = mutation({
     );
 
     // 4. Patch profile: name / email / phone
-    await ctx.db.patch(profile._id, {
+    await ctx.db.patch("profiles", profile._id, {
       name: args.name.trim(),
       email: args.email.trim().toLowerCase(),
       phone: args.phone?.trim() || undefined,

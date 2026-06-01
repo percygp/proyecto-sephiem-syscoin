@@ -46,18 +46,18 @@ export const toggleFeatureFlag = mutation({
 
     if (existing) {
       // Cast: el discriminated union no correlaciona key dinámico con value.
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("systemSettings", existing._id, {
         value: args.enabled,
         updatedAt: now,
         updatedByProfileId: admin._id,
-      } as any);
+      });
     } else {
       await ctx.db.insert("systemSettings", {
         key: args.flagKey,
         value: args.enabled,
         updatedAt: now,
         updatedByProfileId: admin._id,
-      } as any);
+      });
     }
 
     await ctx.runMutation(internal.audit.log, {

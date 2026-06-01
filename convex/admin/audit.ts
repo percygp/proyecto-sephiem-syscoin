@@ -22,7 +22,7 @@ export const listAuditLogs = query({
     for (const log of logs) {
       let actorName: string | null = null;
       if (log.actorProfileId) {
-        const profile = await ctx.db.get(log.actorProfileId);
+        const profile = await ctx.db.get("profiles", log.actorProfileId);
         actorName = profile?.name ?? null;
       }
       result.push({
@@ -47,11 +47,11 @@ export const getAuditDetail = query({
   args: { auditLogId: v.id("auditLogs") },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const log = await ctx.db.get(args.auditLogId);
+    const log = await ctx.db.get("auditLogs", args.auditLogId);
     if (!log) return null;
     let actorName: string | null = null;
     if (log.actorProfileId) {
-      const profile = await ctx.db.get(log.actorProfileId);
+      const profile = await ctx.db.get("profiles", log.actorProfileId);
       actorName = profile?.name ?? null;
     }
     return {

@@ -68,10 +68,12 @@ function InvoiceCard({
     subscriptionMonths: number;
   };
 }) {
-  const expired = invoice.expiresAt < Date.now();
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
+  const expired = invoice.expiresAt < now;
   const hoursLeft = Math.max(
     0,
-    Math.round((invoice.expiresAt - Date.now()) / (60 * 60 * 1000)),
+    Math.round((invoice.expiresAt - now) / (60 * 60 * 1000)),
   );
 
   return (

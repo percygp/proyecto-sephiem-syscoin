@@ -33,7 +33,7 @@ export const getHermesContext = internalQuery({
     }),
   ),
   handler: async (ctx, args) => {
-    const conversation = await ctx.db.get(args.conversationId);
+    const conversation = await ctx.db.get("conversations", args.conversationId);
     if (!conversation || conversation.type !== "hermes_patient") return null;
 
     const patientId = conversation.patientId;
@@ -92,7 +92,7 @@ export const saveHermesReply = internalMutation({
       sentAt: now,
     });
 
-    await ctx.db.patch(args.conversationId, { lastMessageAt: now });
+    await ctx.db.patch("conversations", args.conversationId, { lastMessageAt: now });
 
     // 2. Upsert hermesState
     const existing = await ctx.db
@@ -104,7 +104,7 @@ export const saveHermesReply = internalMutation({
       .slice(0, CONTEXT_SUMMARY_MAX);
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
+      await ctx.db.patch("hermesState", existing._id, {
         contextSummary: summary,
         lastReportedMood: args.reportedMood ?? existing.lastReportedMood,
         promptVersion: args.promptVersion,

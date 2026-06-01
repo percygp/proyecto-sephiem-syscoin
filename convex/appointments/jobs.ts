@@ -114,7 +114,7 @@ export const expireHeldSlots = internalMutation({
     for (const slot of heldSlots) {
       if (slot.heldUntil === undefined || slot.heldUntil >= now) continue;
 
-      await ctx.db.patch(slot._id, { status: "expired" });
+      await ctx.db.patch("appointmentSlots", slot._id, { status: "expired" });
 
       // Cita pendiente asociada a este slot.
       const appts = await ctx.db
@@ -123,12 +123,12 @@ export const expireHeldSlots = internalMutation({
         .collect();
       const appointment = appts.find((a) => a.status === "pending");
       if (appointment) {
-        await ctx.db.patch(appointment._id, { status: "expired" });
+        await ctx.db.patch("appointments", appointment._id, { status: "expired" });
         // Invoice asociada: expira si seguía pendiente.
         if (appointment.invoiceId) {
-          const invoice = await ctx.db.get(appointment.invoiceId);
+          const invoice = await ctx.db.get("paymentInvoices", appointment.invoiceId);
           if (invoice && invoice.status === "pending") {
-            await ctx.db.patch(invoice._id, { status: "expired" });
+            await ctx.db.patch("paymentInvoices", invoice._id, { status: "expired" });
           }
         }
         await ctx.runMutation(internal.audit.log, {
@@ -159,7 +159,7 @@ export const updatePayoutStatuses = internalMutation({
 
     for (const payout of earned) {
       if (payout.earnedAt === undefined || now - payout.earnedAt < DAY_MS) continue;
-      await ctx.db.patch(payout._id, { status: "payable" });
+      await ctx.db.patch("specialistPayouts", payout._id, { status: "payable" });
       await ctx.runMutation(internal.audit.log, {
         actorType: "system",
         action: "SPECIALIST_PAYOUT_PAYABLE",

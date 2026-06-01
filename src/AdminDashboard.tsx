@@ -19,7 +19,7 @@ export function AdminDashboard() {
 
   return (
     <div className="h-screen flex flex-col bg-ink text-porcelain overflow-hidden">
-      <AdminHeader activeTab={activeTab} onTabChange={setActiveTab} onLogout={logout} />
+      <AdminHeader activeTab={activeTab} onTabChange={setActiveTab} onLogout = {() => void logout()} />
       <div className="flex-1 flex overflow-hidden">
         <main className="flex-1 overflow-y-auto p-6">
           {activeTab === "panel" && <PanelTab metrics={metrics} />}
@@ -101,21 +101,21 @@ function LatePaymentsTab() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   disabled={busy !== null}
-                  onClick={() => act(a._id, "reschedule")}
+                  onClick={() => void act(a._id, "reschedule")}
                   className="text-xs px-3 py-1.5 rounded-lg border border-mist text-porcelain/80 hover:border-royal-azure/50 disabled:opacity-40"
                 >
                   Aceptar y reagendar
                 </button>
                 <button
                   disabled={busy !== null}
-                  onClick={() => act(a._id, "credit")}
+                  onClick={() => { void act(a._id, "credit")}}
                   className="text-xs px-3 py-1.5 rounded-lg border border-soft-fawn/40 text-soft-fawn hover:bg-soft-fawn/10 disabled:opacity-40"
                 >
                   Emitir crédito
                 </button>
                 <button
                   disabled={busy !== null}
-                  onClick={() => act(a._id, "reject")}
+                  onClick={() => void act(a._id, "reject")}
                   className="text-xs px-3 py-1.5 rounded-lg border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40"
                 >
                   Rechazar
@@ -374,9 +374,12 @@ function SuscripcionesTab({
         {subscriptions.length === 0 && (
           <div className="text-porcelain/40 text-sm py-8 text-center">No hay pacientes registrados</div>
         )}
-        {subscriptions.map((s) => {
-          const expired = s.subscriptionExpiresAt && s.subscriptionExpiresAt < Date.now();
-          const soon = s.subscriptionExpiresAt && !expired && s.subscriptionExpiresAt < Date.now() + 7 * 24 * 60 * 60 * 1000;
+        
+          {subscriptions.map((s) => {
+            // eslint-disable-next-line react-hooks/purity
+            const now = Date.now();
+            const expired = s.subscriptionExpiresAt && s.subscriptionExpiresAt < now;
+            const soon = s.subscriptionExpiresAt && !expired && s.subscriptionExpiresAt < now + 7 * 24 * 60 * 60 * 1000;
           return (
             <div key={s.patientId} className="bg-graphite rounded-xl p-4 border border-mist flex items-center gap-4">
               <div className="flex-1 min-w-0">
@@ -680,7 +683,7 @@ function PRGTab({
       <div className="flex gap-2">
         {!status.enabled && (
           <button
-            onClick={handleEnable}
+            onClick={() => void handleEnable()}
             disabled={saving === "enable" || status.pendingChecks > 0}
             className={`px-4 py-2 rounded-lg text-sm font-mono transition-colors ${
               status.pendingChecks > 0
@@ -763,7 +766,7 @@ function PRGTab({
                       </td>
                       <td className="p-3 text-right whitespace-nowrap">
                         <button
-                          onClick={() => handleSave(c.checkKey)}
+                          onClick={() => void handleSave(c.checkKey)}
                           disabled={saving === c.checkKey}
                           className="text-success hover:text-success/80 mr-2"
                         >
@@ -828,7 +831,7 @@ function PRGTab({
                 Cancelar
               </button>
               <button
-                onClick={handleDisable}
+                onClick={() => void handleDisable()}
                 disabled={!disableReason.trim() || saving === "disable"}
                 className="px-4 py-2 rounded-lg text-sm bg-soft-fawn text-ink disabled:opacity-50"
               >

@@ -148,7 +148,7 @@ export function ChatPanel(p: ChatPanelProps) {
 
       {/* Input */}
       <form
-        onSubmit={handleSend}
+        onSubmit={(e) => { void handleSend(e); }}
         className="border-t border-mist px-6 py-3 bg-graphite/30"
       >
         {error && (

@@ -123,7 +123,7 @@ export const updateConsultationNotes = mutation({
   handler: async (ctx, args) => {
     const doctorProfile = await requireDoctor(ctx);
 
-    const consultation = await ctx.db.get(args.consultationId);
+    const consultation = await ctx.db.get("consultations", args.consultationId);
     if (!consultation) {
       throw new ConvexError({
         code: "CONSULTATION_NOTE_NOT_FOUND",
@@ -152,7 +152,7 @@ export const updateConsultationNotes = mutation({
       return { success: true };
     }
 
-    await ctx.db.patch(args.consultationId, patch);
+    await ctx.db.patch("consultations", args.consultationId, patch);
 
     await ctx.runMutation(internal.audit.log, {
       actorProfileId: doctorProfile._id,

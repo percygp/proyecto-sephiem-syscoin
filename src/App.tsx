@@ -332,7 +332,7 @@ function HermesChat({ profileId }: { profileId: Id<"profiles"> }) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const r = await ensure({});
         if (!cancelled) setConversationId(r.conversationId);
@@ -387,7 +387,7 @@ function DoctorChat({ profileId }: { profileId: Id<"profiles"> }) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const r = await ensure({});
         if (!cancelled) setConversationId(r.conversationId);

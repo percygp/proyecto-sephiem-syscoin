@@ -19,7 +19,7 @@ export const getAdminMetrics = query({
 
     const doctorsWithProfiles = [];
     for (const d of allDoctors) {
-      const profile = await ctx.db.get(d.profileId);
+      const profile = await ctx.db.get("profiles", d.profileId);
       if (profile?.isActive !== false) {
         doctorsWithProfiles.push(d);
       }

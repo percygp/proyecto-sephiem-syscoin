@@ -34,7 +34,7 @@ export async function processPayoutCore(
   payoutId: Id<"specialistPayouts">,
   processedByProfileId?: Id<"profiles">,
 ): Promise<{ payoutId: Id<"specialistPayouts">; status: string; payoutTxHashHash?: string }> {
-  const payout = await ctx.db.get(payoutId);
+  const payout = await ctx.db.get("specialistPayouts", payoutId);
   if (!payout) {
     throw new ConvexError({ code: "PAYOUT_NOT_FOUND", message: "Payout no existe" });
   }
@@ -68,12 +68,13 @@ export async function processPayoutCore(
         });
       }
       break;
-    default:
-      throw new ConvexError({ code: "PAYOUT_INVALID_STATE", message: `Estado inválido: ${payout.status}` });
+      default:
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+        throw new ConvexError({ code: "PAYOUT_INVALID_STATE", message: `Estado inválido: ${payout.status}` });
   }
 
   // Transición atómica a processing (Convex serializa mutations → evita doble envío).
-  await ctx.db.patch(payout._id, {
+  await ctx.db.patch("specialistPayouts", payout._id, {
     status: "processing",
     ...(processedByProfileId ? { processedByProfileId } : {}),
   });
@@ -81,7 +82,7 @@ export async function processPayoutCore(
   // ── Envío SIMULADO (mock testnet) ──────────────────────────────────────
   const txHash = mockTxHash();
   const payoutTxHashHash = await truncatedSha256(txHash);
-  await ctx.db.patch(payout._id, {
+  await ctx.db.patch("specialistPayouts", payout._id, {
     status: "paid",
     payoutTxHash: txHash,
     payoutTxHashHash,
@@ -129,7 +130,7 @@ export const getPayoutTxHash = mutation({
     await requireFeatureFlag(ctx, "paymentsEnabled");
     const admin = await requireAdmin(ctx);
 
-    const payout = await ctx.db.get(args.payoutId);
+    const payout = await ctx.db.get("specialistPayouts", args.payoutId);
     if (!payout) {
       throw new ConvexError({ code: "PAYOUT_NOT_FOUND", message: "Payout no existe" });
     }

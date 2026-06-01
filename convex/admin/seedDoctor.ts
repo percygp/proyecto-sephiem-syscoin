@@ -63,7 +63,7 @@ export const listAllPatients = internalQuery({
     const patients = await ctx.db.query("patients").take(50);
     const result = [];
     for (const p of patients) {
-      const profile = await ctx.db.get(p.profileId);
+      const profile = await ctx.db.get("profiles", p.profileId);
       result.push({
         _id: p._id,
         profileId: p.profileId,
@@ -89,7 +89,7 @@ export const listAllDoctors = internalQuery({
     const doctors = await ctx.db.query("doctors").take(50);
     const result = [];
     for (const d of doctors) {
-      const profile = await ctx.db.get(d.profileId);
+      const profile = await ctx.db.get("profiles", d.profileId);
       result.push({
         _id: d._id,
         profileId: d.profileId,
@@ -119,7 +119,7 @@ export const promoteProfileToDoctor = internalMutation({
     previousRole: v.string(),
   }),
   handler: async (ctx, args) => {
-    const profile = await ctx.db.get(args.profileId);
+    const profile = await ctx.db.get("profiles", args.profileId);
     if (!profile) {
       throw new ConvexError({
         code: "PROFILE_NOT_FOUND",
@@ -139,7 +139,7 @@ export const promoteProfileToDoctor = internalMutation({
     const previousRole = profile.role;
 
     // Patch role del profile
-    await ctx.db.patch(args.profileId, { role: "doctor" });
+    await ctx.db.patch("profiles", args.profileId, { role: "doctor" });
 
     // Insert doctor row
     const doctorId = await ctx.db.insert("doctors", {
@@ -173,14 +173,14 @@ export const assignDoctorToPatient = internalMutation({
   },
   returns: v.object({ success: v.boolean() }),
   handler: async (ctx, args) => {
-    const patient = await ctx.db.get(args.patientId);
+    const patient = await ctx.db.get("patients", args.patientId);
     if (!patient) {
       throw new ConvexError({
         code: "PATIENT_NOT_FOUND",
         message: "Patient no existe",
       });
     }
-    const doctor = await ctx.db.get(args.doctorId);
+    const doctor = await ctx.db.get("doctors", args.doctorId);
     if (!doctor) {
       throw new ConvexError({
         code: "DOCTOR_NOT_FOUND",
@@ -188,7 +188,7 @@ export const assignDoctorToPatient = internalMutation({
       });
     }
 
-    await ctx.db.patch(args.patientId, { assignedDoctorId: args.doctorId });
+    await ctx.db.patch("patients", args.patientId, { assignedDoctorId: args.doctorId });
 
     await ctx.runMutation(internal.audit.log, {
       actorType: "system",

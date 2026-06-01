@@ -80,7 +80,7 @@ export const sendMessage = mutation({
     });
 
     // Patch lastMessageAt
-    await ctx.db.patch(args.conversationId, { lastMessageAt: now });
+    await ctx.db.patch("conversations", args.conversationId, { lastMessageAt: now });
 
     // A18: si es conversación con Hermes, agendar procesamiento AI
     if (conversation.type === "hermes_patient") {
@@ -96,7 +96,7 @@ export const sendMessage = mutation({
     if (conversation.type === "doctor_patient" && conversation.doctorId) {
       // Si el sender es paciente, notificar al doctor; si es doctor, notificar al paciente
       if (senderType === "patient") {
-        const doctor = await ctx.db.get(conversation.doctorId);
+        const doctor = await ctx.db.get("doctors", conversation.doctorId);
         if (doctor) {
           await ctx.runMutation(
             internal.notifications.notifications.create,
@@ -108,7 +108,7 @@ export const sendMessage = mutation({
           );
         }
       } else if (senderType === "doctor") {
-        const patient = await ctx.db.get(conversation.patientId);
+        const patient = await ctx.db.get("patients", conversation.patientId);
         if (patient) {
           await ctx.runMutation(
             internal.notifications.notifications.create,
@@ -218,7 +218,7 @@ export const markConversationRead = mutation({
     let marked = 0;
     for (const m of unread) {
       if (!m.isRead && m.senderProfileId !== profile._id) {
-        await ctx.db.patch(m._id, { isRead: true, readAt: now });
+        await ctx.db.patch("messages", m._id, { isRead: true, readAt: now });
         marked++;
       }
     }

@@ -48,7 +48,7 @@ export const createSpecialistReview = mutation({
       });
     }
 
-    const appointment = await ctx.db.get(args.appointmentId);
+    const appointment = await ctx.db.get("appointments", args.appointmentId);
     if (!appointment || appointment.status !== "completed") {
       throw new ConvexError({
         code: "APPOINTMENT_NOT_COMPLETED",
@@ -57,7 +57,7 @@ export const createSpecialistReview = mutation({
     }
 
     // Solo el paciente dueño de la cita puede reseñar.
-    const patient = await ctx.db.get(appointment.patientId);
+    const patient = await ctx.db.get("patients", appointment.patientId);
     if (!patient || patient.profileId !== profile._id) {
       throw new ConvexError({
         code: "FORBIDDEN",

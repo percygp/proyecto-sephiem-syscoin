@@ -138,8 +138,7 @@ export const smokeTestPRG = internalMutation({
     // (la validación está en el handler de la mutation; aquí confirmamos
     // que la lógica detecta el caso)
     const evidenceEmpty = "" as string;
-    const updateMissingEvidenceShouldFail =
-      "approved" === "approved" && evidenceEmpty.trim().length === 0;
+    const updateMissingEvidenceShouldFail = evidenceEmpty.trim().length === 0;
 
     // Test 3: simular updatePRGCheck con check documental sin documentVersion
     const documentalKey = "convex_dpa" as string;
@@ -321,7 +320,7 @@ export const approveAuthSpike = internalMutation({
       };
     }
 
-    await ctx.db.patch(check._id, {
+    await ctx.db.patch("productionReadinessChecks", check._id, {
       status: "approved",
       approvedAt: Date.now(),
       evidence:
@@ -380,7 +379,7 @@ export const approveHdWalletSetup = internalMutation({
       };
     }
 
-    await ctx.db.patch(check._id, {
+    await ctx.db.patch("productionReadinessChecks", check._id, {
       status: "approved",
       approvedAt: Date.now(),
       evidence:
