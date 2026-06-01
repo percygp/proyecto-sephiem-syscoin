@@ -131,6 +131,8 @@ const actionValidator = v.union(
   v.literal("SPECIALIST_PAYOUT_EARNED"),
   v.literal("SPECIALIST_PAYOUT_PAID"),
   v.literal("SPECIALIST_PAYOUT_FAILED"),
+  v.literal("APPOINTMENT_EXPIRED"),
+  v.literal("SPECIALIST_PAYOUT_PAYABLE"),
 );
 
 const actorTypeValidator = v.union(

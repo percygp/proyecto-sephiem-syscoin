@@ -68,4 +68,33 @@ crons.interval(
   { network: "syscoin_testnet" },
 );
 
+// B13 (VAL-57): agendamiento + payouts
+crons.interval(
+  "generar slots desde availability",
+  { hours: 1 },
+  internal.appointments.jobs.generarSlotsDesdeAvailability,
+  {},
+);
+
+crons.interval(
+  "expirar holds de slots",
+  { minutes: 5 },
+  internal.appointments.jobs.expireHeldSlots,
+  {},
+);
+
+crons.interval(
+  "actualizar estados de payouts",
+  { hours: 1 },
+  internal.appointments.jobs.updatePayoutStatuses,
+  {},
+);
+
+crons.interval(
+  "procesar payouts payable",
+  { minutes: 30 },
+  internal.payments.payouts.processReadyPayouts,
+  {},
+);
+
 export default crons;

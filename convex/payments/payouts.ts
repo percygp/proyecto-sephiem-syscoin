@@ -1,19 +1,107 @@
 /**
- * B12 (VAL-56) — processSpecialistPayout (admin) con idempotencia + retry.
+ * B12 (VAL-56) + B13 (VAL-57) — Procesamiento de payouts a especialistas.
  *
  * ENVÍO SIMULADO (mock testnet): no existe firma/broadcast on-chain en el HD
- * wallet (solo derivación de direcciones). `mockTxHash()` genera un txHash
- * falso para validar la máquina de estados en staging SIN mover fondos.
- * Reemplazar el bloque "envío simulado" por la integración real cuando exista.
+ * wallet (solo derivación). `mockTxHash()` genera un txHash falso para validar
+ * la máquina de estados SIN mover fondos. Reemplazar el bloque "envío simulado"
+ * por la integración real cuando exista.
+ *
+ * processSpecialistPayout (admin) y processReadyPayouts (cron) comparten el core
+ * `processPayoutCore`. El cron corre como system (sin processedByProfileId).
  */
 import { ConvexError, v } from "convex/values";
-import { mutation } from "../_generated/server";
+import {
+  mutation,
+  internalMutation,
+  internalQuery,
+  internalAction,
+  MutationCtx,
+} from "../_generated/server";
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import { requireAdmin } from "../lib/rbac";
 import { requireFeatureFlag } from "../lib/featureFlags";
 import { mockTxHash, truncatedSha256 } from "../lib/money";
 
 const MAX_RETRIES = 3;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// processPayoutCore — helper plano compartido (admin mutation + cron)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function processPayoutCore(
+  ctx: MutationCtx,
+  payoutId: Id<"specialistPayouts">,
+  processedByProfileId?: Id<"profiles">,
+): Promise<{ payoutId: Id<"specialistPayouts">; status: string; payoutTxHashHash?: string }> {
+  const payout = await ctx.db.get(payoutId);
+  if (!payout) {
+    throw new ConvexError({ code: "PAYOUT_NOT_FOUND", message: "Payout no existe" });
+  }
+
+  switch (payout.status) {
+    case "paid":
+      throw new ConvexError({ code: "PAYOUT_ALREADY_PAID", message: "Payout ya fue pagado (idempotencia)" });
+    case "processing":
+      throw new ConvexError({ code: "PAYOUT_PROCESSING", message: "Payout ya está en proceso" });
+    case "refunded":
+      throw new ConvexError({ code: "PAYOUT_REFUNDED", message: "Payout ya fue reembolsado" });
+    case "disputed":
+      throw new ConvexError({ code: "PAYOUT_DISPUTED", message: "Payout está en disputa" });
+    case "pending":
+      throw new ConvexError({ code: "PAYOUT_NOT_PAYABLE", message: "Payout aún no es payable" });
+    case "earned":
+      throw new ConvexError({ code: "PAYOUT_NOT_PAYABLE", message: "Payout en earned: esperar payable (24h)" });
+    case "payable":
+      break;
+    case "failed":
+      if ((payout.retryCount ?? 0) >= MAX_RETRIES) {
+        await ctx.scheduler.runAfter(0, internal.maintenance.alertOps.sendOpsAlert, {
+          level: "critical",
+          event: "LATE_PAYMENT_REVIEW",
+          resourceType: "payment",
+          resourceId: payout._id,
+        });
+        throw new ConvexError({
+          code: "PAYOUT_RETRY_EXHAUSTED",
+          message: `Payout superó ${MAX_RETRIES} reintentos; revisión manual`,
+        });
+      }
+      break;
+    default:
+      throw new ConvexError({ code: "PAYOUT_INVALID_STATE", message: `Estado inválido: ${payout.status}` });
+  }
+
+  // Transición atómica a processing (Convex serializa mutations → evita doble envío).
+  await ctx.db.patch(payout._id, {
+    status: "processing",
+    ...(processedByProfileId ? { processedByProfileId } : {}),
+  });
+
+  // ── Envío SIMULADO (mock testnet) ──────────────────────────────────────
+  const txHash = mockTxHash();
+  const payoutTxHashHash = await truncatedSha256(txHash);
+  await ctx.db.patch(payout._id, {
+    status: "paid",
+    payoutTxHash: txHash,
+    payoutTxHashHash,
+    paidAt: Date.now(),
+  });
+
+  await ctx.runMutation(internal.audit.log, {
+    actorProfileId: processedByProfileId,
+    actorType: processedByProfileId ? "admin" : "system",
+    action: "SPECIALIST_PAYOUT_PAID",
+    targetId: payout._id,
+    channel: processedByProfileId ? "web" : "system",
+  });
+
+  return { payoutId: payout._id, status: "paid", payoutTxHashHash };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// processSpecialistPayout (mutation, admin)
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const processSpecialistPayout = mutation({
   args: { payoutId: v.id("specialistPayouts") },
@@ -25,74 +113,67 @@ export const processSpecialistPayout = mutation({
   handler: async (ctx, args) => {
     await requireFeatureFlag(ctx, "paymentsEnabled");
     const admin = await requireAdmin(ctx);
+    return await processPayoutCore(ctx, args.payoutId, admin._id);
+  },
+});
 
-    const payout = await ctx.db.get(args.payoutId);
-    if (!payout) {
-      throw new ConvexError({ code: "PAYOUT_NOT_FOUND", message: "Payout no existe" });
+// ─────────────────────────────────────────────────────────────────────────────
+// processPayoutInternal (internalMutation) — usado por el cron processReadyPayouts
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const processPayoutInternal = internalMutation({
+  args: { payoutId: v.id("specialistPayouts") },
+  returns: v.object({
+    payoutId: v.id("specialistPayouts"),
+    status: v.string(),
+    payoutTxHashHash: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    return await processPayoutCore(ctx, args.payoutId);
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// listPayablePayouts (internalQuery) — hasta 10 payouts en "payable"
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const listPayablePayouts = internalQuery({
+  args: {},
+  returns: v.array(v.id("specialistPayouts")),
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("specialistPayouts")
+      .withIndex("by_status", (q) => q.eq("status", "payable"))
+      .take(10);
+    return rows.map((r) => r._id);
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// processReadyPayouts (internalAction, cron) — procesa payables, error aislado
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const processReadyPayouts = internalAction({
+  args: {},
+  returns: v.object({ processed: v.number(), failed: v.number() }),
+  handler: async (ctx): Promise<{ processed: number; failed: number }> => {
+    const ids = await ctx.runQuery(
+      internal.payments.payouts.listPayablePayouts,
+      {},
+    );
+    let processed = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await ctx.runMutation(internal.payments.payouts.processPayoutInternal, {
+          payoutId: id,
+        });
+        processed++;
+      } catch (err) {
+        failed++;
+        console.error("[processReadyPayouts] payout error:", id, err);
+      }
     }
-
-    // Idempotencia / validación de estado.
-    switch (payout.status) {
-      case "paid":
-        throw new ConvexError({ code: "PAYOUT_ALREADY_PAID", message: "Payout ya fue pagado (idempotencia)" });
-      case "processing":
-        throw new ConvexError({ code: "PAYOUT_PROCESSING", message: "Payout ya está en proceso" });
-      case "refunded":
-        throw new ConvexError({ code: "PAYOUT_REFUNDED", message: "Payout ya fue reembolsado" });
-      case "disputed":
-        throw new ConvexError({ code: "PAYOUT_DISPUTED", message: "Payout está en disputa" });
-      case "pending":
-        throw new ConvexError({ code: "PAYOUT_NOT_PAYABLE", message: "Payout aún no es payable (esperar cita completada + hold)" });
-      case "payable":
-        break; // primer intento
-      case "earned":
-        throw new ConvexError({ code: "PAYOUT_NOT_PAYABLE", message: "Payout en earned: esperar transición a payable (24h)" });
-      case "failed":
-        // Retry: si superó el máximo, marcar failed permanente y alertar.
-        if ((payout.retryCount ?? 0) >= MAX_RETRIES) {
-          await ctx.scheduler.runAfter(0, internal.maintenance.alertOps.sendOpsAlert, {
-            level: "critical",
-            event: "LATE_PAYMENT_REVIEW",
-            resourceType: "payment",
-            resourceId: payout._id,
-          });
-          throw new ConvexError({
-            code: "PAYOUT_RETRY_EXHAUSTED",
-            message: `Payout superó ${MAX_RETRIES} reintentos; revisión manual requerida`,
-          });
-        }
-        break;
-      default:
-        throw new ConvexError({ code: "PAYOUT_INVALID_STATE", message: `Estado inválido: ${payout.status}` });
-    }
-
-    // Transición atómica a processing (Convex serializa mutations → evita doble envío).
-    await ctx.db.patch(payout._id, {
-      status: "processing",
-      processedByProfileId: admin._id,
-    });
-
-    // ── Envío SIMULADO (mock testnet) ──────────────────────────────────────
-    // Reemplazar por firma+broadcast reales cuando exista esa capacidad.
-    const txHash = mockTxHash();
-    const payoutTxHashHash = await truncatedSha256(txHash);
-    const now = Date.now();
-
-    await ctx.db.patch(payout._id, {
-      status: "paid",
-      payoutTxHash: txHash,
-      payoutTxHashHash,
-      paidAt: now,
-    });
-
-    await ctx.runMutation(internal.audit.log, {
-      actorProfileId: admin._id,
-      actorType: "admin",
-      action: "SPECIALIST_PAYOUT_PAID",
-      targetId: payout._id,
-      channel: "web",
-    });
-
-    return { payoutId: payout._id, status: "paid", payoutTxHashHash };
+    return { processed, failed };
   },
 });
