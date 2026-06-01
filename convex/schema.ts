@@ -641,4 +641,63 @@ export default defineSchema({
   })
     .index("by_tokenIdentifier", ["tokenIdentifier"])
     .index("by_expiresAt", ["expiresAt"]),
+
+  // ── 22. marketplaceSpecialists ─────────────────────────────────────────────
+  // B7 (VAL-51) — Marketplace de especialistas.
+  // SEGURIDAD: walletAddress NUNCA debe exponerse en queries públicas; solo vía
+  // RBAC estricto (admin/system). Único por profileId (validar con .unique()).
+  // consultationFeeSYS en string para precisión decimal (igual que pagos).
+  marketplaceSpecialists: defineTable({
+    profileId: v.id("profiles"),
+    licenseNumber: v.string(),
+    jurisdiction: v.string(),
+    walletAddress: v.string(),
+    isVerifiedByAdmin: v.boolean(),
+    specialty: v.string(),
+    description: v.optional(v.string()),
+    consultationFeeSYS: v.string(),
+    yearsOfExperience: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_profileId", ["profileId"])
+    .index("by_isVerifiedByAdmin", ["isVerifiedByAdmin"])
+    .index("by_specialty", ["specialty"]),
+
+  // ── 23. specialistAvailability ─────────────────────────────────────────────
+  // B7 (VAL-51) — Disponibilidad semanal recurrente del especialista.
+  // dayOfWeek: 0=domingo … 6=sábado. startTime/endTime "HH:MM".
+  specialistAvailability: defineTable({
+    specialistId: v.id("marketplaceSpecialists"),
+    dayOfWeek: v.number(),
+    startTime: v.string(),
+    endTime: v.string(),
+    isActive: v.boolean(),
+  }).index("by_specialistId", ["specialistId"]),
+
+  // ── 24. appointmentSlots ───────────────────────────────────────────────────
+  // B7 (VAL-51) — Slots concretos de cita generados desde availability.
+  // Máquina de estados: solo `available` es mutable; held→TTL en heldUntil.
+  // (specialistReviews se añade en VAL-54 [B10] junto con la tabla appointments.)
+  appointmentSlots: defineTable({
+    specialistId: v.id("marketplaceSpecialists"),
+    startTime: v.number(),
+    endTime: v.number(),
+    status: v.union(
+      v.literal("available"),
+      v.literal("held"),
+      v.literal("confirmed"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("expired"),
+    ),
+    patientId: v.optional(v.id("patients")),
+    heldUntil: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_specialistId", ["specialistId"])
+    .index("by_status", ["status"])
+    .index("by_specialistId_and_status", ["specialistId", "status"])
+    .index("by_status_and_heldUntil", ["status", "heldUntil"])
+    .index("by_startTime", ["startTime"]),
 });
