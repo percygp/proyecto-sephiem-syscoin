@@ -703,4 +703,91 @@ export default defineSchema({
     .index("by_specialistId_and_status", ["specialistId", "status"])
     .index("by_status_and_heldUntil", ["status", "heldUntil"])
     .index("by_startTime", ["startTime"]),
+
+  // ── 25. appointments ───────────────────────────────────────────────────────
+  // B10 (VAL-54) — Cita = reserva de un appointmentSlot por un paciente.
+  // slotId enlaza con appointmentSlots (disponibilidad); appointments lleva el
+  // estado de la cita + datos de pago. completedAt marca el paso a "completed"
+  // (base para earned→payable del payout tras 24h).
+  appointments: defineTable({
+    specialistId: v.id("marketplaceSpecialists"),
+    patientId: v.id("patients"),
+    slotId: v.id("appointmentSlots"),
+    startTime: v.number(),
+    endTime: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("confirmed"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("expired"),
+      v.literal("pending_payment_late"),
+      v.literal("pending_reschedule"),
+      v.literal("credit_issued"),
+    ),
+    completedAt: v.optional(v.number()),
+    invoiceId: v.optional(v.id("paymentInvoices")),
+    amountPaidSYS: v.optional(v.string()),
+    txHash: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_specialistId", ["specialistId"])
+    .index("by_patientId", ["patientId"])
+    .index("by_slotId", ["slotId"])
+    .index("by_status", ["status"]),
+
+  // ── 26. specialistReviews ──────────────────────────────────────────────────
+  // B7/B10 (VAL-51 diferido → VAL-54) — Reseña de una cita completada.
+  // Sin campo `comment` (riesgo PHI). Rating 1-5 validado en runtime.
+  // by_appointmentId único: una reseña por cita (validar con .unique()).
+  // El rating promedio se calcula en tiempo real (no se almacena).
+  specialistReviews: defineTable({
+    appointmentId: v.id("appointments"),
+    specialistId: v.id("marketplaceSpecialists"),
+    patientProfileId: v.id("profiles"),
+    rating: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_appointmentId", ["appointmentId"])
+    .index("by_specialistId", ["specialistId"])
+    .index("by_createdAt", ["createdAt"]),
+
+  // ── 27. specialistPayouts ──────────────────────────────────────────────────
+  // B10 (VAL-54) — Lifecycle financiero del payout al especialista.
+  // SEGURIDAD: payoutTxHash completo solo accesible vía RBAC admin/system.
+  // Antes del payout NO existe txHash; para logs/audit usar
+  // destinationWalletAddressHash (siempre presente desde creación).
+  // earnedAt marca earned→ (base para earned→payable tras 24h de hold).
+  specialistPayouts: defineTable({
+    specialistId: v.id("marketplaceSpecialists"),
+    appointmentId: v.id("appointments"),
+    amountSYS: v.string(),
+    platformFeeSYS: v.optional(v.string()),
+    amountToSpecialistSYS: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("earned"),
+      v.literal("payable"),
+      v.literal("processing"),
+      v.literal("paid"),
+      v.literal("refunded"),
+      v.literal("failed"),
+      v.literal("disputed"),
+    ),
+    destinationWalletAddressHash: v.string(),
+    payoutTxHash: v.optional(v.string()),
+    payoutTxHashHash: v.optional(v.string()),
+    processedByProfileId: v.optional(v.id("profiles")),
+    failureReason: v.optional(v.string()),
+    retryCount: v.optional(v.number()),
+    disputeReason: v.optional(v.string()),
+    refundReason: v.optional(v.string()),
+    createdAt: v.number(),
+    earnedAt: v.optional(v.number()),
+    paidAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+  })
+    .index("by_specialistId", ["specialistId"])
+    .index("by_appointmentId", ["appointmentId"])
+    .index("by_status", ["status"]),
 });
