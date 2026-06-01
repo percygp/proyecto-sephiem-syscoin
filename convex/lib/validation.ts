@@ -35,6 +35,11 @@ export function isValidEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
+/** Dirección EVM (Syscoin NEVM): 0x + 40 hex. */
+export function isValidEvmAddress(s: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(s);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Asserters (lanzan ConvexError o pasan silenciosamente)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,6 +75,16 @@ export function assertEmail(value: string, field: string): void {
     throw new ConvexError({
       code: "INVALID_EMAIL",
       message: `'${field}' no tiene formato de email válido`,
+      field,
+    });
+  }
+}
+
+export function assertEvmAddress(value: string, field: string): void {
+  if (!isValidEvmAddress(value)) {
+    throw new ConvexError({
+      code: "INVALID_WALLET_ADDRESS",
+      message: `'${field}' debe ser una dirección EVM válida (0x + 40 hex)`,
       field,
     });
   }

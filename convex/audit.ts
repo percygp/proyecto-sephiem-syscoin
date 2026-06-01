@@ -120,6 +120,9 @@ const actionValidator = v.union(
   v.literal("PRG_CHECK_REJECTED"),
   v.literal("PRG_CHECK_EXPIRED"),
   v.literal("FEATURE_FLAG_TOGGLED"),
+  v.literal("SPECIALIST_REGISTERED"),
+  v.literal("SPECIALIST_APPROVED"),
+  v.literal("SPECIALIST_WALLET_ACCESSED"),
 );
 
 const actorTypeValidator = v.union(
