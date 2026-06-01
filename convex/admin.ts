@@ -63,6 +63,31 @@ export const listSettings = internalQuery({
         updatedAt: v.number(),
         updatedByProfileId: v.optional(v.id("profiles")),
       }),
+      // B6 (VAL-50): feature flags
+      v.object({
+        _id: v.id("systemSettings"),
+        _creationTime: v.number(),
+        key: v.literal("marketplaceEnabled"),
+        value: v.boolean(),
+        updatedAt: v.number(),
+        updatedByProfileId: v.optional(v.id("profiles")),
+      }),
+      v.object({
+        _id: v.id("systemSettings"),
+        _creationTime: v.number(),
+        key: v.literal("appointmentsEnabled"),
+        value: v.boolean(),
+        updatedAt: v.number(),
+        updatedByProfileId: v.optional(v.id("profiles")),
+      }),
+      v.object({
+        _id: v.id("systemSettings"),
+        _creationTime: v.number(),
+        key: v.literal("paymentsEnabled"),
+        value: v.boolean(),
+        updatedAt: v.number(),
+        updatedByProfileId: v.optional(v.id("profiles")),
+      }),
     ),
   ),
   handler: async (ctx) => {

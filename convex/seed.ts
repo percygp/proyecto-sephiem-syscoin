@@ -2,7 +2,7 @@
  * A3 — Seed inicial del sistema
  *
  * Inserta los registros que deben existir desde el primer deploy:
- *  - 4 entradas en systemSettings (configuración global)
+ *  - systemSettings (configuración global + feature flags B6)
  *  - 14 entradas en productionReadinessChecks (gate de producción)
  *
  * IDEMPOTENTE: re-ejecutar no duplica registros. Usa findExistingOrNull
@@ -32,6 +32,11 @@ const SYSTEM_SETTINGS_SEED = [
   },
   // A14: counter HD wallet BIP44, empieza en 0
   { key: "nextDerivationIndex" as const, value: 0 },
+  // B6 (VAL-50): feature flags Fase 1. Default true en staging.
+  // Revisar defaults para producción (gatean módulos aún en construcción).
+  { key: "marketplaceEnabled" as const, value: true },
+  { key: "appointmentsEnabled" as const, value: true },
+  { key: "paymentsEnabled" as const, value: true },
 ];
 
 export const seedSystemSettings = internalMutation({

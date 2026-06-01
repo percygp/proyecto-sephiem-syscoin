@@ -168,6 +168,7 @@ const auditActionEnum = v.union(
   v.literal("PRG_CHECK_APPROVED"),
   v.literal("PRG_CHECK_REJECTED"),
   v.literal("PRG_CHECK_EXPIRED"),
+  v.literal("FEATURE_FLAG_TOGGLED"),
 );
 
 const auditTargetTypeEnum = v.union(
@@ -588,6 +589,25 @@ export default defineSchema({
       v.object({
         key: v.literal("nextDerivationIndex"),
         value: v.number(),
+        updatedAt: v.number(),
+        updatedByProfileId: v.optional(v.id("profiles")),
+      }),
+      // B6 (VAL-50): feature flags. Gate de módulos de Fase 1.
+      v.object({
+        key: v.literal("marketplaceEnabled"),
+        value: v.boolean(),
+        updatedAt: v.number(),
+        updatedByProfileId: v.optional(v.id("profiles")),
+      }),
+      v.object({
+        key: v.literal("appointmentsEnabled"),
+        value: v.boolean(),
+        updatedAt: v.number(),
+        updatedByProfileId: v.optional(v.id("profiles")),
+      }),
+      v.object({
+        key: v.literal("paymentsEnabled"),
+        value: v.boolean(),
         updatedAt: v.number(),
         updatedByProfileId: v.optional(v.id("profiles")),
       }),

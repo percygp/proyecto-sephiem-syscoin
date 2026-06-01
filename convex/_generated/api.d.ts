@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as admin_audit from "../admin/audit.js";
 import type * as admin_doctors from "../admin/doctors.js";
+import type * as admin_featureFlags from "../admin/featureFlags.js";
 import type * as admin_invoices from "../admin/invoices.js";
 import type * as admin_metrics from "../admin/metrics.js";
 import type * as admin_prg from "../admin/prg.js";
@@ -33,6 +34,7 @@ import type * as doctors_medicalAlerts from "../doctors/medicalAlerts.js";
 import type * as doctors_queries from "../doctors/queries.js";
 import type * as doctors_treatments from "../doctors/treatments.js";
 import type * as http from "../http.js";
+import type * as lib_featureFlags from "../lib/featureFlags.js";
 import type * as lib_rbac from "../lib/rbac.js";
 import type * as lib_unique from "../lib/unique.js";
 import type * as lib_validation from "../lib/validation.js";
@@ -64,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   "admin/audit": typeof admin_audit;
   "admin/doctors": typeof admin_doctors;
+  "admin/featureFlags": typeof admin_featureFlags;
   "admin/invoices": typeof admin_invoices;
   "admin/metrics": typeof admin_metrics;
   "admin/prg": typeof admin_prg;
@@ -86,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   "doctors/queries": typeof doctors_queries;
   "doctors/treatments": typeof doctors_treatments;
   http: typeof http;
+  "lib/featureFlags": typeof lib_featureFlags;
   "lib/rbac": typeof lib_rbac;
   "lib/unique": typeof lib_unique;
   "lib/validation": typeof lib_validation;

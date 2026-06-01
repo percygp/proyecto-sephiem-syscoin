@@ -119,6 +119,7 @@ const actionValidator = v.union(
   v.literal("PRG_CHECK_APPROVED"),
   v.literal("PRG_CHECK_REJECTED"),
   v.literal("PRG_CHECK_EXPIRED"),
+  v.literal("FEATURE_FLAG_TOGGLED"),
 );
 
 const actorTypeValidator = v.union(
