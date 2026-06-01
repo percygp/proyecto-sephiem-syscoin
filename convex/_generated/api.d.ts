@@ -24,6 +24,7 @@ import type * as ai_hermesData from "../ai/hermesData.js";
 import type * as ai_prompts from "../ai/prompts.js";
 import type * as appointments_booking from "../appointments/booking.js";
 import type * as appointments_jobs from "../appointments/jobs.js";
+import type * as appointments_queries from "../appointments/queries.js";
 import type * as audit from "../audit.js";
 import type * as auth_nonceCleanup from "../auth/nonceCleanup.js";
 import type * as auth_profiles from "../auth/profiles.js";
@@ -84,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   "ai/prompts": typeof ai_prompts;
   "appointments/booking": typeof appointments_booking;
   "appointments/jobs": typeof appointments_jobs;
+  "appointments/queries": typeof appointments_queries;
   audit: typeof audit;
   "auth/nonceCleanup": typeof auth_nonceCleanup;
   "auth/profiles": typeof auth_profiles;

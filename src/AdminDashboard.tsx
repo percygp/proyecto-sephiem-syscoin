@@ -4,7 +4,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 
-type AdminTab = "panel" | "doctores" | "suscripciones" | "facturacion" | "auditoria" | "prg";
+type AdminTab = "panel" | "doctores" | "suscripciones" | "facturacion" | "auditoria" | "prg" | "pagos_tardios";
 
 export function AdminDashboard() {
   const { logout, user } = usePrivy();
@@ -28,6 +28,7 @@ export function AdminDashboard() {
           {activeTab === "facturacion" && <FacturacionTab invoices={invoices} />}
           {activeTab === "auditoria" && <AuditoriaTab auditLogs={auditLogs} />}
           {activeTab === "prg" && <PRGTab checks={prgChecks} status={prgStatus} />}
+          {activeTab === "pagos_tardios" && <LatePaymentsTab />}
         </main>
         <AdminSidebar user={user ? { email: user.email?.address } : undefined} metrics={metrics} />
       </div>
@@ -43,7 +44,90 @@ const TABS: { key: AdminTab; label: string }[] = [
   { key: "suscripciones", label: "Suscripciones" },
   { key: "facturacion", label: "Facturación" },
   { key: "auditoria", label: "Auditoría" },
+  { key: "pagos_tardios", label: "Pagos tardíos" },
 ];
+
+function LatePaymentsTab() {
+  const appts = useQuery(api.appointments.queries.listLatePaymentAppointments, {});
+  const handle = useMutation(api.appointments.booking.handleLatePayment);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function act(
+    id: Id<"appointments">,
+    decision: "reschedule" | "credit" | "reject",
+  ) {
+    setError(null);
+    setBusy(id + decision);
+    try {
+      await handle({ appointmentId: id, decision });
+    } catch (err) {
+      const data = (err as { data?: { message?: string } }).data;
+      setError(data?.message ?? (err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="max-w-3xl">
+      <h2 className="text-xl font-semibold mb-1">Pagos tardíos en revisión</h2>
+      <p className="text-sm text-porcelain/50 mb-5">
+        Citas con pago fuera del hold. Decide reagendar, emitir crédito o rechazar.
+      </p>
+      {error && (
+        <div className="mb-3 text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">
+          {error}
+        </div>
+      )}
+      {appts === undefined ? (
+        <p className="text-sm text-porcelain/40">Cargando…</p>
+      ) : appts.length === 0 ? (
+        <p className="text-sm text-porcelain/40">No hay pagos tardíos pendientes.</p>
+      ) : (
+        <div className="space-y-3">
+          {appts.map((a) => (
+            <div key={a._id} className="bg-graphite border border-mist rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{a.specialty}</div>
+                  <div className="text-xs text-porcelain/50">
+                    {new Date(a.startTime).toLocaleString("es")}
+                    {a.amountPaidSYS ? ` · ${a.amountPaidSYS} SYS` : ""}
+                    {a.txHashTruncated ? ` · tx ${a.txHashTruncated}` : ""}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  disabled={busy !== null}
+                  onClick={() => act(a._id, "reschedule")}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-mist text-porcelain/80 hover:border-royal-azure/50 disabled:opacity-40"
+                >
+                  Aceptar y reagendar
+                </button>
+                <button
+                  disabled={busy !== null}
+                  onClick={() => act(a._id, "credit")}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-soft-fawn/40 text-soft-fawn hover:bg-soft-fawn/10 disabled:opacity-40"
+                >
+                  Emitir crédito
+                </button>
+                <button
+                  disabled={busy !== null}
+                  onClick={() => act(a._id, "reject")}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40"
+                >
+                  Rechazar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AdminHeader({
   activeTab,
