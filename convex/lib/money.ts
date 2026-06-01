@@ -35,6 +35,15 @@ export async function truncatedSha256(input: string): Promise<string> {
   return hex.slice(0, 16);
 }
 
+/**
+ * Trunca un identificador/hash a 12 chars + "…" para logs human-facing.
+ * (Los auditLogs almacenan el _id opaco completo de Convex para trazabilidad;
+ * usar esto solo en mensajes/UI/logs externos donde no se requiera lookup.)
+ */
+export function truncateHash(id: string): string {
+  return id.length <= 12 ? id : id.slice(0, 12) + "…";
+}
+
 /** Genera un txHash simulado (mock testnet) — NO es una tx on-chain real. */
 export function mockTxHash(): string {
   const bytes = new Uint8Array(32);

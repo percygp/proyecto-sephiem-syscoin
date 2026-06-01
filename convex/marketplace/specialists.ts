@@ -20,6 +20,7 @@ import { requireAuth, requireAdmin } from "../lib/rbac";
 import { requireFeatureFlag } from "../lib/featureFlags";
 import { assertStringLength, assertEvmAddress } from "../lib/validation";
 import { assertUnique } from "../lib/unique";
+import { computeSpecialistRating } from "./reviews";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mutations
@@ -207,25 +208,31 @@ export const getSpecialists = query({
       .order("desc")
       .paginate(args.paginationOpts);
 
-    const page = result.page
-      .filter((s) => {
-        if (args.specialty && s.specialty !== args.specialty) return false;
-        if (args.maxFee !== undefined) {
-          const fee = parseFloat(s.consultationFeeSYS);
-          if (!Number.isNaN(fee) && fee > args.maxFee) return false;
-        }
-        // minRating no aplicable hasta VAL-54 (rating=null).
-        return true;
-      })
-      .map((s) => ({
-        _id: s._id,
-        _creationTime: s._creationTime,
-        specialty: s.specialty,
-        isVerifiedByAdmin: s.isVerifiedByAdmin,
-        consultationFeeSYS: s.consultationFeeSYS,
-        yearsOfExperience: s.yearsOfExperience,
-        rating: null as number | null,
-      }));
+    const enriched = await Promise.all(
+      result.page.map(async (s) => {
+        const { rating } = await computeSpecialistRating(ctx, s._id);
+        return {
+          _id: s._id,
+          _creationTime: s._creationTime,
+          specialty: s.specialty,
+          isVerifiedByAdmin: s.isVerifiedByAdmin,
+          consultationFeeSYS: s.consultationFeeSYS,
+          yearsOfExperience: s.yearsOfExperience,
+          rating,
+        };
+      }),
+    );
+    const page = enriched.filter((s) => {
+      if (args.specialty && s.specialty !== args.specialty) return false;
+      if (args.maxFee !== undefined) {
+        const fee = parseFloat(s.consultationFeeSYS);
+        if (!Number.isNaN(fee) && fee > args.maxFee) return false;
+      }
+      if (args.minRating !== undefined) {
+        if (s.rating === null || s.rating < args.minRating) return false;
+      }
+      return true;
+    });
 
     return {
       page,
@@ -266,6 +273,7 @@ export const getSpecialistDetail = query({
     if (!specialist || !specialist.isVerifiedByAdmin) return null;
 
     const profile = await ctx.db.get(specialist.profileId);
+    const { rating } = await computeSpecialistRating(ctx, specialist._id);
 
     return {
       _id: specialist._id,
@@ -276,7 +284,7 @@ export const getSpecialistDetail = query({
       yearsOfExperience: specialist.yearsOfExperience,
       consultationFeeSYS: specialist.consultationFeeSYS,
       description: specialist.description,
-      rating: null as number | null,
+      rating,
       walletVerified: specialist.walletAddress.length > 0,
     };
   },

@@ -118,6 +118,35 @@ export const processSpecialistPayout = mutation({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// getPayoutTxHash (mutation, solo admin) — devuelve el txHash COMPLETO bajo RBAC
+// y audita el acceso. Es mutation (no query) porque audita (queries no escriben).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getPayoutTxHash = mutation({
+  args: { payoutId: v.id("specialistPayouts") },
+  returns: v.object({ payoutTxHash: v.union(v.string(), v.null()) }),
+  handler: async (ctx, args) => {
+    await requireFeatureFlag(ctx, "paymentsEnabled");
+    const admin = await requireAdmin(ctx);
+
+    const payout = await ctx.db.get(args.payoutId);
+    if (!payout) {
+      throw new ConvexError({ code: "PAYOUT_NOT_FOUND", message: "Payout no existe" });
+    }
+
+    await ctx.runMutation(internal.audit.log, {
+      actorProfileId: admin._id,
+      actorType: "admin",
+      action: "SPECIALIST_PAYOUT_TXHASH_ACCESSED",
+      targetId: payout._id,
+      channel: "web",
+    });
+
+    return { payoutTxHash: payout.payoutTxHash ?? null };
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // processPayoutInternal (internalMutation) — usado por el cron processReadyPayouts
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -183,6 +183,8 @@ const auditActionEnum = v.union(
   v.literal("SPECIALIST_PAYOUT_FAILED"),
   v.literal("APPOINTMENT_EXPIRED"),
   v.literal("SPECIALIST_PAYOUT_PAYABLE"),
+  v.literal("REVIEW_CREATED"),
+  v.literal("SPECIALIST_PAYOUT_TXHASH_ACCESSED"),
 );
 
 const auditTargetTypeEnum = v.union(

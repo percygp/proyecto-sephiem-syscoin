@@ -44,6 +44,7 @@ import type * as lib_unique from "../lib/unique.js";
 import type * as lib_validation from "../lib/validation.js";
 import type * as maintenance_alertOps from "../maintenance/alertOps.js";
 import type * as maintenance_auditRetention from "../maintenance/auditRetention.js";
+import type * as marketplace_reviews from "../marketplace/reviews.js";
 import type * as marketplace_specialists from "../marketplace/specialists.js";
 import type * as messages_conversations from "../messages/conversations.js";
 import type * as messages_messages from "../messages/messages.js";
@@ -105,6 +106,7 @@ declare const fullApi: ApiFromModules<{
   "lib/validation": typeof lib_validation;
   "maintenance/alertOps": typeof maintenance_alertOps;
   "maintenance/auditRetention": typeof maintenance_auditRetention;
+  "marketplace/reviews": typeof marketplace_reviews;
   "marketplace/specialists": typeof marketplace_specialists;
   "messages/conversations": typeof messages_conversations;
   "messages/messages": typeof messages_messages;
