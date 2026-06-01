@@ -8,6 +8,7 @@ import { AdminDashboard } from "./AdminDashboard";
 import { ChatPanel } from "./ChatPanel";
 import { NotificationsBell } from "./NotificationsBell";
 import { PaymentsSection } from "./PaymentsSection";
+import { MarketplacePage } from "./MarketplacePage";
 import type { Id } from "../convex/_generated/dataModel";
 
 type Tab = "perfil" | "bitacora" | "marketplace" | "chat";
@@ -315,7 +316,7 @@ function MainContent({
       {tab === "bitacora" && <HermesChat profileId={profileId} />}
       {tab === "chat" && <DoctorChat profileId={profileId} />}
       {tab === "perfil" && <PaymentsSection />}
-      {tab === "marketplace" && <PlaceholderView title="Marketplace" />}
+      {tab === "marketplace" && <MarketplacePage />}
     </main>
   );
 }
@@ -442,24 +443,6 @@ function DoctorChat({ profileId }: { profileId: Id<"profiles"> }) {
       avatarChar="M"
       myProfileId={profileId}
     />
-  );
-}
-
-function PlaceholderView({ title }: { title: string }) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-      <div className="w-16 h-16 rounded-2xl bg-graphite border border-mist flex items-center justify-center text-royal-azure text-2xl mb-4">
-        ◫
-      </div>
-      <h2 className="text-xl font-semibold mb-2">{title}</h2>
-      <p className="text-sm text-porcelain/50 max-w-md leading-relaxed">
-        Esta sección estará disponible cuando se completen las actividades
-        de implementación del Track A.
-      </p>
-      <p className="text-[11px] text-porcelain/40 font-mono mt-3">
-        Estado actual: prototipo · 1/14 PRG checks
-      </p>
-    </div>
   );
 }
 
