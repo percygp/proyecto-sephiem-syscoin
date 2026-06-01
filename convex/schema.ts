@@ -177,6 +177,10 @@ const auditActionEnum = v.union(
   v.literal("APPOINTMENT_CONFIRMED"),
   v.literal("APPOINTMENT_LATE_PAYMENT_REQUIRES_REVIEW"),
   v.literal("LATE_PAYMENT_HANDLED"),
+  v.literal("APPOINTMENT_COMPLETED"),
+  v.literal("SPECIALIST_PAYOUT_EARNED"),
+  v.literal("SPECIALIST_PAYOUT_PAID"),
+  v.literal("SPECIALIST_PAYOUT_FAILED"),
 );
 
 const auditTargetTypeEnum = v.union(

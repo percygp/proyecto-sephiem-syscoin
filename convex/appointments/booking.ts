@@ -24,6 +24,7 @@ import type { Id } from "../_generated/dataModel";
 import { requireAuth, requireAdmin } from "../lib/rbac";
 import { requireFeatureFlag } from "../lib/featureFlags";
 import { assertUnique } from "../lib/unique";
+import { computePayoutSplit, truncatedSha256 } from "../lib/money";
 
 const HOLD_MS = 15 * 60 * 1000; // 15 min
 const SYSCOIN_TESTNET_CHAIN_ID = 5700;
@@ -407,5 +408,92 @@ export const handleLatePayment = mutation({
     });
 
     return { appointmentId: appointment._id, decision: args.decision };
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// completeAppointment (mutation, paciente o especialista) — crea payout earned
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const completeAppointment = mutation({
+  args: { appointmentId: v.id("appointments") },
+  returns: v.object({
+    appointmentId: v.id("appointments"),
+    payoutId: v.id("specialistPayouts"),
+  }),
+  handler: async (ctx, args) => {
+    await requireFeatureFlag(ctx, "paymentsEnabled");
+    const profile = await requireAuth(ctx);
+
+    const appointment = await ctx.db.get(args.appointmentId);
+    if (!appointment) {
+      throw new ConvexError({
+        code: "APPOINTMENT_NOT_FOUND",
+        message: "Cita no encontrada",
+      });
+    }
+    if (appointment.status !== "confirmed") {
+      throw new ConvexError({
+        code: "APPOINTMENT_NOT_CONFIRMED",
+        message: `La cita debe estar confirmada (status: ${appointment.status})`,
+      });
+    }
+
+    // Autorización: el paciente dueño o el especialista de la cita (o admin).
+    const specialist = await ctx.db.get(appointment.specialistId);
+    const patient = await ctx.db.get(appointment.patientId);
+    const isPatient = !!patient && patient.profileId === profile._id;
+    const isSpecialist = !!specialist && specialist.profileId === profile._id;
+    if (profile.role !== "admin" && !isPatient && !isSpecialist) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "Solo el paciente o el especialista pueden completar la cita",
+      });
+    }
+    if (!specialist) {
+      throw new ConvexError({
+        code: "SPECIALIST_NOT_FOUND",
+        message: "Especialista no encontrado",
+      });
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(appointment._id, { status: "completed", completedAt: now });
+    await ctx.db.patch(appointment.slotId, { status: "completed" });
+
+    const amountSYS = appointment.amountPaidSYS ?? "0";
+    const { platformFeeSYS, amountToSpecialistSYS } = computePayoutSplit(amountSYS);
+    const destinationWalletAddressHash = await truncatedSha256(
+      specialist.walletAddress,
+    );
+
+    const payoutId = await ctx.db.insert("specialistPayouts", {
+      specialistId: appointment.specialistId,
+      appointmentId: appointment._id,
+      amountSYS,
+      platformFeeSYS,
+      amountToSpecialistSYS,
+      status: "earned", // cita completada → directo a earned
+      destinationWalletAddressHash,
+      createdAt: now,
+      earnedAt: now,
+    });
+
+    await ctx.runMutation(internal.audit.log, {
+      actorProfileId: profile._id,
+      actorType: profile.role,
+      action: "APPOINTMENT_COMPLETED",
+      targetId: appointment._id,
+      channel: "web",
+    });
+    await ctx.runMutation(internal.audit.log, {
+      actorProfileId: profile._id,
+      actorType: profile.role,
+      action: "SPECIALIST_PAYOUT_EARNED",
+      targetId: payoutId,
+      channel: "web",
+    });
+
+    return { appointmentId: appointment._id, payoutId };
   },
 });
