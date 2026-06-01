@@ -112,6 +112,7 @@ const invoiceStatusEnum = v.union(
   v.literal("partial"),
   v.literal("expired"),
   v.literal("cancelled"),
+  v.literal("late_payment"), // B11 (VAL-55): pago de cita fuera del hold
 );
 
 const paymentStatusEnum = v.union(
@@ -172,6 +173,10 @@ const auditActionEnum = v.union(
   v.literal("SPECIALIST_REGISTERED"),
   v.literal("SPECIALIST_APPROVED"),
   v.literal("SPECIALIST_WALLET_ACCESSED"),
+  v.literal("APPOINTMENT_CREATED"),
+  v.literal("APPOINTMENT_CONFIRMED"),
+  v.literal("APPOINTMENT_LATE_PAYMENT_REQUIRES_REVIEW"),
+  v.literal("LATE_PAYMENT_HANDLED"),
 );
 
 const auditTargetTypeEnum = v.union(
@@ -463,6 +468,8 @@ export default defineSchema({
     status: invoiceStatusEnum,
     expiresAt: v.number(),
     subscriptionMonths: v.number(),
+    // B11 (VAL-55): si la invoice corresponde a una cita (no suscripción).
+    appointmentId: v.optional(v.id("appointments")),
   })
     .index("by_patientId", ["patientId"])
     .index("by_invoiceCode", ["invoiceCode"])

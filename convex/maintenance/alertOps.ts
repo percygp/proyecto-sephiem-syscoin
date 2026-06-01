@@ -36,6 +36,7 @@ const eventEnum = v.union(
   v.literal("RPC_DOWN"),
   v.literal("RECONCILIATION_DISCREPANCY"),
   v.literal("PRG_CHECK_EXPIRED"),
+  v.literal("LATE_PAYMENT_REVIEW"), // B11 (VAL-55): pago de cita fuera del hold
 );
 
 export const sendOpsAlert = internalAction({

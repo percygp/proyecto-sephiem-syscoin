@@ -123,6 +123,10 @@ const actionValidator = v.union(
   v.literal("SPECIALIST_REGISTERED"),
   v.literal("SPECIALIST_APPROVED"),
   v.literal("SPECIALIST_WALLET_ACCESSED"),
+  v.literal("APPOINTMENT_CREATED"),
+  v.literal("APPOINTMENT_CONFIRMED"),
+  v.literal("APPOINTMENT_LATE_PAYMENT_REQUIRES_REVIEW"),
+  v.literal("LATE_PAYMENT_HANDLED"),
 );
 
 const actorTypeValidator = v.union(

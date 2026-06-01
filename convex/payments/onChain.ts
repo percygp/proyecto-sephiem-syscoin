@@ -13,6 +13,7 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { ConvexError } from "convex/values";
 import { findExistingOrNull } from "../lib/unique";
+import { confirmAppointmentPayment } from "../appointments/booking";
 
 const currencyEnum = v.union(v.literal("SYS"), v.literal("USDT"));
 const networkEnum = v.union(
@@ -215,6 +216,17 @@ async function finalizePaymentInternal(
     targetType: "payment",
     channel: "system",
   });
+
+  // B11 (VAL-55): invoice de cita → confirma/late en vez de activar suscripción.
+  if (invoice.appointmentId) {
+    await confirmAppointmentPayment(
+      ctx,
+      invoice._id,
+      payment.txHash,
+      payment.amountReceived,
+    );
+    return false;
+  }
 
   if (!activate) return false;
 
