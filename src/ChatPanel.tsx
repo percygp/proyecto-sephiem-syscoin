@@ -28,6 +28,8 @@ type ChatPanelProps = {
   // Si true, deshabilita el input (ej: hilo con Hermes mientras A18 no esté)
   inputDisabled?: boolean;
   inputDisabledHint?: string;
+  // Aviso informativo mostrado como banner bajo el header (ej: fase de pruebas).
+  notice?: string;
 };
 
 export function ChatPanel(p: ChatPanelProps) {
@@ -106,6 +108,13 @@ export function ChatPanel(p: ChatPanelProps) {
           <span className="text-porcelain/80">En línea</span>
         </div>
       </div>
+
+      {/* Aviso (ej: fase de pruebas de mejora para la atención) */}
+      {p.notice && (
+        <div className="px-4 py-2 border-b border-mist bg-soft-fawn/10 shrink-0">
+          <p className="text-[11px] text-soft-fawn leading-snug">{p.notice}</p>
+        </div>
+      )}
 
       {/* Hilo */}
       <div

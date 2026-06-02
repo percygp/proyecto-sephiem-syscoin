@@ -371,6 +371,7 @@ function HermesChat({ profileId }: { profileId: Id<"profiles"> }) {
       avatarChar="✦"
       myProfileId={profileId}
       inputDisabled={false}
+      notice="Estamos en fase de pruebas de mejora para la atención. Las respuestas pueden ajustarse mientras optimizamos el servicio."
     />
   );
 }
