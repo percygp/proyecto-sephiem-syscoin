@@ -23,18 +23,39 @@ export function DoctorDashboard() {
   const doctor = useQuery(api.doctors.queries.getMyDoctor);
   const patients = useQuery(api.doctors.queries.listMyPatients);
   const [selectedPatientId, setSelectedPatientId] = useState<Id<"patients"> | null>(null);
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
 
   return (
     <div className="h-screen flex flex-col bg-ink text-porcelain overflow-hidden">
-      <DoctorHeader doctor={doctor} onLogout={() => void logout() } />
+      <DoctorHeader
+        doctor={doctor}
+        onLogout={() => void logout()}
+        onToggleLeft={() => setLeftOpen((v) => !v)}
+        onToggleRight={() => setRightOpen((v) => !v)}
+      />
       <div className="flex-1 flex overflow-hidden">
         <PatientsSidebar
           patients={patients}
           selectedId={selectedPatientId}
-          onSelect={setSelectedPatientId}
+          onSelect={(id) => { setSelectedPatientId(id); setLeftOpen(false); }}
+          open={leftOpen}
+          onClose={() => setLeftOpen(false)}
         />
         <PatientDetailPanel patientId={selectedPatientId} />
-        <DoctorInfoSidebar doctor={doctor} patientsCount={patients?.length ?? 0} />
+        <DoctorInfoSidebar
+          doctor={doctor}
+          patientsCount={patients?.length ?? 0}
+          open={rightOpen}
+          onClose={() => setRightOpen(false)}
+        />
+        {(leftOpen || rightOpen) && (
+          <div
+            onClick={() => { setLeftOpen(false); setRightOpen(false); }}
+            className="fixed inset-x-0 top-14 bottom-0 z-30 bg-black/50 lg:hidden"
+            aria-hidden="true"
+          />
+        )}
       </div>
       <DoctorFooter />
     </div>
@@ -48,17 +69,28 @@ export function DoctorDashboard() {
 function DoctorHeader({
   doctor,
   onLogout,
+  onToggleLeft,
+  onToggleRight,
 }: {
   doctor: ReturnType<typeof useQuery<typeof api.doctors.queries.getMyDoctor>>;
   onLogout: () => void;
+  onToggleLeft: () => void;
+  onToggleRight: () => void;
 }) {
   return (
-    <header className="h-14 border-b border-mist bg-ink/80 backdrop-blur flex items-center px-4 gap-4 shrink-0">
-      <div className="flex items-center gap-2.5">
+    <header className="h-14 border-b border-mist bg-ink/80 backdrop-blur flex items-center px-4 gap-3 sm:gap-4 shrink-0">
+      <button
+        onClick={onToggleLeft}
+        aria-label="Abrir pacientes"
+        className="lg:hidden shrink-0 -ml-2 w-11 h-11 flex items-center justify-center text-lg text-porcelain/70 hover:text-porcelain"
+      >
+        ☰
+      </button>
+      <div className="flex items-center gap-2.5 shrink-0">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-royal-azure to-ship-cove flex items-center justify-center shadow-lg shadow-royal-azure/20">
           <span className="text-porcelain font-bold">S</span>
         </div>
-        <div className="flex flex-col leading-tight">
+        <div className="hidden sm:flex flex-col leading-tight">
           <div className="flex items-center gap-1.5">
             <span className="font-bold tracking-wide text-base">SEPHIEM</span>
             <span className="bg-royal-azure/15 border border-royal-azure/40 text-royal-azure text-[9px] px-1.5 py-0.5 rounded font-mono">
@@ -71,10 +103,10 @@ function DoctorHeader({
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center text-sm text-porcelain/70">
+      <div className="flex-1 hidden md:flex items-center justify-center text-sm text-porcelain/70 min-w-0">
         {doctor ? (
           <>
-            <span>{doctor.profile.name}</span>
+            <span className="truncate">{doctor.profile.name}</span>
             <span className="mx-2 text-porcelain/30">·</span>
             <span className="text-soft-fawn">{doctor.specialty}</span>
             <span className="mx-2 text-porcelain/30">·</span>
@@ -85,13 +117,20 @@ function DoctorHeader({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0 ml-auto md:ml-0">
         <NotificationsBell />
         <button
           onClick={() => void onLogout()}
           className="text-xs px-3 py-1.5 rounded-md border border-mist hover:border-porcelain/30 transition-colors"
         >
           Cerrar sesión
+        </button>
+        <button
+          onClick={onToggleRight}
+          aria-label="Abrir mi perfil médico"
+          className="lg:hidden shrink-0 -mr-2 w-11 h-11 flex items-center justify-center text-base text-porcelain/70 hover:text-porcelain"
+        >
+          ⊞
         </button>
       </div>
     </header>
@@ -106,22 +145,39 @@ function PatientsSidebar({
   patients,
   selectedId,
   onSelect,
+  open,
+  onClose,
 }: {
   patients: ReturnType<typeof useQuery<typeof api.doctors.queries.listMyPatients>>;
   selectedId: Id<"patients"> | null;
   onSelect: (id: Id<"patients">) => void;
+  open: boolean;
+  onClose: () => void;
 }) {
   return (
-    <aside className="w-72 border-r border-mist bg-graphite/40 flex flex-col overflow-hidden">
+    <aside
+      className={`fixed top-14 bottom-0 left-0 z-40 w-72 max-w-[85%] border-r border-mist bg-graphite flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-graphite/40 ${
+        open ? "translate-x-0" : "-translate-x-full"
+      }`}
+    >
       <AlertsSection onSelectPatient={onSelect} />
 
       <div className="px-4 py-3 border-b border-mist flex items-center justify-between">
         <h2 className="text-[10px] uppercase tracking-widest text-porcelain/45 font-mono">
           Pacientes Asignados
         </h2>
-        <span className="text-[10px] text-porcelain/50 font-mono">
-          {patients?.length ?? "…"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-porcelain/50 font-mono">
+            {patients?.length ?? "…"}
+          </span>
+          <button
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="lg:hidden text-porcelain/50 hover:text-porcelain text-sm"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
@@ -323,8 +379,8 @@ function PatientDetail({ patientId }: { patientId: Id<"patients"> }) {
           </h1>
           <StatusPill status={detail.patient.subscriptionStatus} />
         </div>
-        <div className="flex gap-4 text-xs text-porcelain/60">
-          <span>📧 {detail.patient.profile.email}</span>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-porcelain/60">
+          <span className="break-all">📧 {detail.patient.profile.email}</span>
           {detail.patient.profile.phone && (
             <span className="font-mono">📞 {detail.patient.profile.phone}</span>
           )}
@@ -649,16 +705,31 @@ function NewTreatmentForm({ patientId }: { patientId: Id<"patients"> }) {
 function DoctorInfoSidebar({
   doctor,
   patientsCount,
+  open,
+  onClose,
 }: {
   doctor: ReturnType<typeof useQuery<typeof api.doctors.queries.getMyDoctor>>;
   patientsCount: number;
+  open: boolean;
+  onClose: () => void;
 }) {
   return (
-    <aside className="w-72 border-l border-mist bg-graphite/40 flex flex-col overflow-hidden">
-      <div className="px-4 py-3 border-b border-mist">
+    <aside
+      className={`fixed top-14 bottom-0 right-0 z-40 w-72 max-w-[85%] border-l border-mist bg-graphite flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-graphite/40 ${
+        open ? "translate-x-0" : "translate-x-full"
+      }`}
+    >
+      <div className="px-4 py-3 border-b border-mist flex items-center justify-between">
         <h2 className="text-[10px] uppercase tracking-widest text-porcelain/45 font-mono">
           Mi Perfil Médico
         </h2>
+        <button
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="lg:hidden text-porcelain/50 hover:text-porcelain text-sm"
+        >
+          ✕
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
         {doctor && (

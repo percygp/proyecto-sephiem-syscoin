@@ -9,6 +9,7 @@ type AdminTab = "panel" | "doctores" | "suscripciones" | "facturacion" | "audito
 export function AdminDashboard() {
   const { logout, user } = usePrivy();
   const [activeTab, setActiveTab] = useState<AdminTab>("panel");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const metrics = useQuery(api.admin.metrics.getAdminMetrics);
   const doctors = useQuery(api.admin.doctors.listDoctors);
   const subscriptions = useQuery(api.admin.subscriptions.listSubscriptions);
@@ -19,9 +20,14 @@ export function AdminDashboard() {
 
   return (
     <div className="h-screen flex flex-col bg-ink text-porcelain overflow-hidden">
-      <AdminHeader activeTab={activeTab} onTabChange={setActiveTab} onLogout = {() => void logout()} />
+      <AdminHeader
+        activeTab={activeTab}
+        onTabChange={(t) => { setActiveTab(t); setSidebarOpen(false); }}
+        onLogout={() => void logout()}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+      />
       <div className="flex-1 flex overflow-hidden">
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           {activeTab === "panel" && <PanelTab metrics={metrics} />}
           {activeTab === "doctores" && <DoctoresTab doctors={doctors} />}
           {activeTab === "suscripciones" && <SuscripcionesTab subscriptions={subscriptions} />}
@@ -30,7 +36,19 @@ export function AdminDashboard() {
           {activeTab === "prg" && <PRGTab checks={prgChecks} status={prgStatus} />}
           {activeTab === "pagos_tardios" && <LatePaymentsTab />}
         </main>
-        <AdminSidebar user={user ? { email: user.email?.address } : undefined} metrics={metrics} />
+        <AdminSidebar
+          user={user ? { email: user.email?.address } : undefined}
+          metrics={metrics}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
+        {sidebarOpen && (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-x-0 top-14 bottom-0 z-30 bg-black/50 lg:hidden"
+            aria-hidden="true"
+          />
+        )}
       </div>
       <AdminFooter />
     </div>
@@ -133,18 +151,20 @@ function AdminHeader({
   activeTab,
   onTabChange,
   onLogout,
+  onToggleSidebar,
 }: {
   activeTab: AdminTab;
   onTabChange: (t: AdminTab) => void;
   onLogout: () => void;
+  onToggleSidebar: () => void;
 }) {
   return (
     <header className="h-14 border-b border-mist bg-ink/80 backdrop-blur flex items-center px-4 gap-3 shrink-0">
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5 shrink-0">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-soft-fawn flex items-center justify-center shadow-lg shadow-amber-500/20">
           <span className="text-porcelain font-bold">S</span>
         </div>
-        <div className="flex flex-col leading-tight">
+        <div className="hidden sm:flex flex-col leading-tight">
           <div className="flex items-center gap-1.5">
             <span className="font-bold tracking-wide text-base">SEPHIEM</span>
             <span className="bg-amber-500/15 border border-amber-500/40 text-amber-400 text-[9px] px-1.5 py-0.5 rounded font-mono">
@@ -156,12 +176,12 @@ function AdminHeader({
           </span>
         </div>
       </div>
-      <nav className="flex-1 flex items-center justify-center gap-1">
+      <nav className="flex-1 flex items-center justify-center gap-1 min-w-0 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => onTabChange(t.key)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap shrink-0 transition-colors ${
               activeTab === t.key
                 ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
                 : "text-porcelain/50 hover:text-porcelain hover:bg-graphite"
@@ -171,9 +191,18 @@ function AdminHeader({
           </button>
         ))}
       </nav>
-      <button onClick={onLogout} className="text-xs text-porcelain/40 hover:text-soft-fawn transition-colors">
-        Salir
-      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          onClick={onToggleSidebar}
+          aria-label="Abrir resumen"
+          className="lg:hidden w-11 h-11 -mr-1 flex items-center justify-center text-base text-porcelain/70 hover:text-porcelain"
+        >
+          ⊞
+        </button>
+        <button onClick={onLogout} className="text-xs text-porcelain/40 hover:text-soft-fawn transition-colors">
+          Salir
+        </button>
+      </div>
     </header>
   );
 }
@@ -181,6 +210,8 @@ function AdminHeader({
 function AdminSidebar({
   user,
   metrics,
+  open,
+  onClose,
 }: {
   user?: { email?: string };
   metrics?: {
@@ -192,9 +223,22 @@ function AdminSidebar({
     monthlyRevenue: string;
     expiredSoon: number;
   };
+  open: boolean;
+  onClose: () => void;
 }) {
   return (
-    <aside className="w-72 border-l border-mist p-4 overflow-y-auto shrink-0 flex flex-col gap-4">
+    <aside
+      className={`fixed top-14 bottom-0 right-0 z-40 w-72 max-w-[85%] border-l border-mist bg-ink p-4 overflow-y-auto flex flex-col gap-4 transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-transparent lg:shrink-0 ${
+        open ? "translate-x-0" : "translate-x-full"
+      }`}
+    >
+      <button
+        onClick={onClose}
+        aria-label="Cerrar"
+        className="lg:hidden self-end -mt-1 text-porcelain/50 hover:text-porcelain text-sm"
+      >
+        ✕
+      </button>
       <div className="bg-graphite rounded-xl p-4 border border-mist">
         <div className="text-[10px] uppercase tracking-widest text-porcelain/40 mb-3 font-mono">
           Admin
@@ -253,7 +297,7 @@ function PanelTab({
   return (
     <div className="max-w-4xl space-y-6">
       <h2 className="text-lg font-bold">Panel de Control</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard label="Pacientes totales" value={metrics.totalPatients} />
         <MetricCard label="Pacientes activos" value={metrics.activePatients} color="text-success" />
         <MetricCard label="Médicos" value={metrics.totalDoctors} />
@@ -667,7 +711,7 @@ function PRGTab({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard label="Checks totales" value={status.totalChecks} />
         <MetricCard label="Aprobados" value={approved} color="text-success" />
         <MetricCard label="Pendientes" value={status.pendingChecks} color={status.pendingChecks > 0 ? "text-soft-fawn" : "text-success"} />

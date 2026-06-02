@@ -17,6 +17,13 @@ export default function App() {
   const { ready, authenticated, login } = usePrivy();
   const { isAuthenticated: convexOk } = useConvexAuth();
   const [activeTab, setActiveTab] = useState<Tab>("bitacora");
+  // Drawers móviles (<lg): conversaciones (izq) + credenciales web3 (der).
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
+  const selectTab = (t: Tab) => {
+    setActiveTab(t);
+    setLeftOpen(false);
+  };
 
   // Gating onboarding: si Convex está autenticado, consultar el patient.
   // Si no hay patient (después de verificar wallet), mostrar onboarding.
@@ -42,11 +49,30 @@ export default function App() {
   if (profile === null) {
     return (
       <div className="h-screen flex flex-col bg-ink text-porcelain overflow-hidden">
-        <Header activeTab={activeTab} onTabChange={setActiveTab} />
+        <Header
+          activeTab={activeTab}
+          onTabChange={selectTab}
+          onToggleLeft={() => setLeftOpen((v) => !v)}
+          onToggleRight={() => setRightOpen((v) => !v)}
+        />
         <div className="flex-1 flex overflow-hidden">
-          <LeftSidebar tab={activeTab} />
+          <LeftSidebar
+            tab={activeTab}
+            open={leftOpen}
+            onClose={() => setLeftOpen(false)}
+          />
           <NeedsWalletVerification />
-          <RightSidebar />
+          <RightSidebar
+            open={rightOpen}
+            onClose={() => setRightOpen(false)}
+          />
+          <MobileBackdrop
+            show={leftOpen || rightOpen}
+            onClick={() => {
+              setLeftOpen(false);
+              setRightOpen(false);
+            }}
+          />
         </div>
         <Footer />
       </div>
@@ -68,14 +94,51 @@ export default function App() {
   // Todo OK: dashboard completo
   return (
     <div className="h-screen flex flex-col bg-ink text-porcelain overflow-hidden">
-      <Header activeTab={activeTab} onTabChange={setActiveTab} />
+      <Header
+        activeTab={activeTab}
+        onTabChange={selectTab}
+        onToggleLeft={() => setLeftOpen((v) => !v)}
+        onToggleRight={() => setRightOpen((v) => !v)}
+      />
       <div className="flex-1 flex overflow-hidden">
-        <LeftSidebar tab={activeTab} />
+        <LeftSidebar
+          tab={activeTab}
+          open={leftOpen}
+          onClose={() => setLeftOpen(false)}
+        />
         <MainContent tab={activeTab} profileId={profile._id} />
-        <RightSidebar />
+        <RightSidebar
+          open={rightOpen}
+          onClose={() => setRightOpen(false)}
+        />
+        <MobileBackdrop
+          show={leftOpen || rightOpen}
+          onClick={() => {
+            setLeftOpen(false);
+            setRightOpen(false);
+          }}
+        />
       </div>
       <Footer />
     </div>
+  );
+}
+
+// Backdrop semitransparente para drawers móviles (<lg). No cubre el header.
+function MobileBackdrop({
+  show,
+  onClick,
+}: {
+  show: boolean;
+  onClick: () => void;
+}) {
+  if (!show) return null;
+  return (
+    <div
+      onClick={onClick}
+      className="fixed inset-x-0 top-14 bottom-0 z-30 bg-black/50 lg:hidden"
+      aria-hidden="true"
+    />
   );
 }
 
@@ -150,16 +213,27 @@ function FullScreenMsg({ text }: { text: string }) {
 function Header({
   activeTab,
   onTabChange,
+  onToggleLeft,
+  onToggleRight,
 }: {
   activeTab: Tab;
   onTabChange: (t: Tab) => void;
+  onToggleLeft: () => void;
+  onToggleRight: () => void;
 }) {
   return (
-    <header className="h-14 border-b border-mist bg-ink/80 backdrop-blur flex items-center px-4 gap-4 shrink-0">
+    <header className="h-14 border-b border-mist bg-ink/80 backdrop-blur flex items-center px-4 gap-3 sm:gap-4 shrink-0">
+      <button
+        onClick={onToggleLeft}
+        aria-label="Abrir conversaciones"
+        className="lg:hidden shrink-0 -ml-2 w-11 h-11 flex items-center justify-center text-lg text-porcelain/70 hover:text-porcelain"
+      >
+        ☰
+      </button>
       <Logo size="sm" />
 
-      <nav className="flex-1 flex items-center justify-center">
-        <div className="flex items-center gap-0.5 bg-graphite border border-mist rounded-full p-1">
+      <nav className="flex-1 flex justify-center min-w-0 overflow-x-auto">
+        <div className="flex items-center gap-0.5 bg-graphite border border-mist rounded-full p-1 shrink-0">
           <TabButton
             label="Perfil Clínico"
             icon="◉"
@@ -187,8 +261,8 @@ function Header({
         </div>
       </nav>
 
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 bg-graphite border border-mist rounded-full px-3 py-1.5 text-xs">
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="hidden sm:flex items-center gap-1.5 bg-graphite border border-mist rounded-full px-3 py-1.5 text-xs">
           <span className="w-1.5 h-1.5 rounded-full bg-success" />
           <span className="text-porcelain/80">Cifrado AES-256</span>
         </div>
@@ -196,8 +270,15 @@ function Header({
         <input
           type="text"
           placeholder="Buscar doctor…"
-          className="bg-graphite border border-mist rounded-full px-3 py-1.5 text-xs text-porcelain placeholder:text-porcelain/40 focus:outline-none focus:border-royal-azure/60 w-44 transition-colors"
+          className="hidden md:block bg-graphite border border-mist rounded-full px-3 py-1.5 text-xs text-porcelain placeholder:text-porcelain/40 focus:outline-none focus:border-royal-azure/60 w-44 transition-colors"
         />
+        <button
+          onClick={onToggleRight}
+          aria-label="Abrir credenciales web3"
+          className="lg:hidden shrink-0 -mr-2 w-11 h-11 flex items-center justify-center text-base text-porcelain/70 hover:text-porcelain"
+        >
+          ⊞
+        </button>
       </div>
     </header>
   );
@@ -246,7 +327,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm transition-all ${
+      className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm whitespace-nowrap shrink-0 transition-all ${
         active
           ? "bg-slate text-porcelain shadow-inner"
           : "text-porcelain/55 hover:text-porcelain hover:bg-slate/50"
@@ -264,7 +345,15 @@ function TabButton({
 // Left Sidebar
 // ─────────────────────────────────────────────────────────────────────────────
 
-function LeftSidebar({ tab }: { tab: Tab }) {
+function LeftSidebar({
+  tab,
+  open,
+  onClose,
+}: {
+  tab: Tab;
+  open: boolean;
+  onClose: () => void;
+}) {
   const titles: Record<Tab, string> = {
     perfil: "Secciones del Perfil",
     bitacora: "Conversaciones",
@@ -273,11 +362,22 @@ function LeftSidebar({ tab }: { tab: Tab }) {
   };
 
   return (
-    <aside className="w-72 border-r border-mist bg-graphite/40 flex flex-col overflow-hidden">
-      <div className="px-4 py-3 border-b border-mist">
+    <aside
+      className={`fixed top-14 bottom-0 left-0 z-40 w-72 max-w-[85%] border-r border-mist bg-graphite flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-graphite/40 ${
+        open ? "translate-x-0" : "-translate-x-full"
+      }`}
+    >
+      <div className="px-4 py-3 border-b border-mist flex items-center justify-between">
         <h2 className="text-[10px] uppercase tracking-widest text-porcelain/45 font-mono">
           {titles[tab]}
         </h2>
+        <button
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="lg:hidden text-porcelain/50 hover:text-porcelain text-sm"
+        >
+          ✕
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         <SidebarEmpty tab={tab} />
@@ -451,7 +551,13 @@ function DoctorChat({ profileId }: { profileId: Id<"profiles"> }) {
 // Right Sidebar — Credenciales Web3
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RightSidebar() {
+function RightSidebar({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const { user, logout } = usePrivy();
   const { wallets } = useWallets();
   const { isAuthenticated: convexOk } = useConvexAuth();
@@ -471,11 +577,22 @@ function RightSidebar() {
     verifiedAddress.toLowerCase() === address.toLowerCase();
 
   return (
-    <aside className="w-72 border-l border-mist bg-graphite/40 flex flex-col overflow-hidden">
-      <div className="px-4 py-3 border-b border-mist">
+    <aside
+      className={`fixed top-14 bottom-0 right-0 z-40 w-72 max-w-[85%] border-l border-mist bg-graphite flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-graphite/40 ${
+        open ? "translate-x-0" : "translate-x-full"
+      }`}
+    >
+      <div className="px-4 py-3 border-b border-mist flex items-center justify-between">
         <h2 className="text-[10px] uppercase tracking-widest text-porcelain/45 font-mono">
           Credenciales Web3
         </h2>
+        <button
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="lg:hidden text-porcelain/50 hover:text-porcelain text-sm"
+        >
+          ✕
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
