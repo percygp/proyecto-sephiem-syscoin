@@ -30,5 +30,8 @@ dist-ssr
 .env.staging
 .env.production
 
+# Secretos locales (mnemonics/seeds HD — NUNCA versionar)
+.secrets/
+
 # Scratch
 /tmp/
