@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { usePrivy, useWallets, useSignMessage } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useConvexAuth, useMutation, useAction, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Onboarding } from "./Onboarding";
@@ -563,7 +563,7 @@ function VerifyWalletButton({ walletAddress }: { walletAddress?: string }) {
   const verifySignature = useAction(
     api.auth.walletVerify.verifyWalletSignature,
   );
-  const { signMessage } = useSignMessage();
+  const { wallets } = useWallets();
   const [state, setState] = useState<
     "idle" | "requesting" | "signing" | "verifying" | "error"
   >("idle");
@@ -578,11 +578,18 @@ function VerifyWalletButton({ walletAddress }: { walletAddress?: string }) {
       setState("requesting");
       const { nonce } = await requestNonce({});
 
-      // 2. Pedir firma a MetaMask
+      // 2. Pedir firma a MetaMask (wallet externa vía EIP-1193 provider)
       setState("signing");
       const message = `Sephiem wallet verification nonce:${nonce}`;
-      const result = await signMessage({ message });
-      const signature = result.signature;
+      const wallet = wallets.find(
+        (w) => w.address.toLowerCase() === walletAddress.toLowerCase(),
+      );
+      if (!wallet) throw new Error("Wallet conectada no encontrada");
+      const provider = await wallet.getEthereumProvider();
+      const signature = (await provider.request({
+        method: "personal_sign",
+        params: [message, wallet.address],
+      })) as string;
 
       // 3. Verificar server-side (viem.verifyMessage + consume nonce + patch profile)
       setState("verifying");
