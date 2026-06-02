@@ -187,7 +187,7 @@ async function finalizePaymentInternal(
 ): Promise<boolean> {
   const payment = await ctx.db.get("payments", paymentId);
   if (!payment) return false;
-  const invoice = await ctx.db.get("invoices", payment.invoiceId);
+  const invoice = await ctx.db.get("paymentInvoices", payment.invoiceId);
   if (!invoice) return false;
 
   await ctx.db.patch("payments", paymentId, { confirmedAt: Date.now() });
@@ -206,7 +206,7 @@ async function finalizePaymentInternal(
     activate = true;
   }
 
-  await ctx.db.patch("invoices", invoice._id, { status: invoiceStatus });
+  await ctx.db.patch("paymentInvoices", invoice._id, { status: invoiceStatus });
 
   await ctx.runMutation(internal.audit.log, {
     actorType: "system",
