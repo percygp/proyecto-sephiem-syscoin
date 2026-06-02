@@ -25,6 +25,18 @@ import { mockTxHash, truncatedSha256 } from "../lib/money";
 
 const MAX_RETRIES = 3;
 
+/**
+ * Envío SIMULADO (mock testnet). Reemplazar por firma/broadcast on-chain real.
+ * `forceFail` permite ejercitar de forma determinística la rama de fallo+retry
+ * (VAL-56) en tests/seeds internos; NO se expone en la API pública.
+ */
+function sendPayoutOnChain(forceFail: boolean): { txHash: string } {
+  if (forceFail) {
+    throw new Error("Simulated on-chain send failure");
+  }
+  return { txHash: mockTxHash() };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // processPayoutCore — helper plano compartido (admin mutation + cron)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,6 +45,7 @@ export async function processPayoutCore(
   ctx: MutationCtx,
   payoutId: Id<"specialistPayouts">,
   processedByProfileId?: Id<"profiles">,
+  forceFail = false,
 ): Promise<{ payoutId: Id<"specialistPayouts">; status: string; payoutTxHashHash?: string }> {
   const payout = await ctx.db.get("specialistPayouts", payoutId);
   if (!payout) {
@@ -79,8 +92,40 @@ export async function processPayoutCore(
     ...(processedByProfileId ? { processedByProfileId } : {}),
   });
 
-  // ── Envío SIMULADO (mock testnet) ──────────────────────────────────────
-  const txHash = mockTxHash();
+  // ── Envío al exterior (mock testnet) ───────────────────────────────────
+  let txHash: string;
+  try {
+    ({ txHash } = sendPayoutOnChain(forceFail));
+  } catch (err) {
+    // Rama de fallo (VAL-56): NO se lanza ConvexError — lanzar revertiría esta
+    // misma transacción (patch failed + audit) y se perdería el estado. Se
+    // persiste "failed", se incrementa retryCount y se retorna el resultado.
+    const retryCount = (payout.retryCount ?? 0) + 1;
+    await ctx.db.patch("specialistPayouts", payout._id, {
+      status: "failed",
+      failureReason: err instanceof Error ? err.message : "unknown send error",
+      retryCount,
+      failedAt: Date.now(),
+    });
+    await ctx.runMutation(internal.audit.log, {
+      actorProfileId: processedByProfileId,
+      actorType: processedByProfileId ? "admin" : "system",
+      action: "SPECIALIST_PAYOUT_FAILED",
+      targetId: payout._id,
+      channel: processedByProfileId ? "web" : "system",
+    });
+    // Fallo permanente al agotar reintentos → notificar admin.
+    if (retryCount >= MAX_RETRIES) {
+      await ctx.scheduler.runAfter(0, internal.maintenance.alertOps.sendOpsAlert, {
+        level: "critical",
+        event: "LATE_PAYMENT_REVIEW",
+        resourceType: "payment",
+        resourceId: payout._id,
+      });
+    }
+    return { payoutId: payout._id, status: "failed" };
+  }
+
   const payoutTxHashHash = await truncatedSha256(txHash);
   await ctx.db.patch("specialistPayouts", payout._id, {
     status: "paid",
@@ -152,14 +197,18 @@ export const getPayoutTxHash = mutation({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const processPayoutInternal = internalMutation({
-  args: { payoutId: v.id("specialistPayouts") },
+  args: {
+    payoutId: v.id("specialistPayouts"),
+    // Solo para validación determinística de la rama failed+retry (VAL-56).
+    forceFail: v.optional(v.boolean()),
+  },
   returns: v.object({
     payoutId: v.id("specialistPayouts"),
     status: v.string(),
     payoutTxHashHash: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
-    return await processPayoutCore(ctx, args.payoutId);
+    return await processPayoutCore(ctx, args.payoutId, undefined, args.forceFail ?? false);
   },
 });
 
