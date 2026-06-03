@@ -1,16 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useConvexAuth, useMutation, useAction, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Onboarding } from "./Onboarding";
 import { DoctorDashboard } from "./DoctorDashboard";
 import { AdminDashboard } from "./AdminDashboard";
-import { ChatPanel } from "./ChatPanel";
 import { NotificationsBell } from "./NotificationsBell";
 import { PaymentsSection } from "./PaymentsSection";
 import { MarketplacePage } from "./MarketplacePage";
 import { useSyscoinNetwork, explorerAddress } from "./web3";
-import type { Id } from "../convex/_generated/dataModel";
 
 type Tab = "perfil" | "bitacora" | "marketplace" | "chat";
 
@@ -113,7 +111,7 @@ export default function App() {
           open={leftOpen}
           onClose={() => setLeftOpen(false)}
         />
-        <MainContent tab={activeTab} profileId={profile._id} />
+        <MainContent tab={activeTab} />
         <RightSidebar
           open={rightOpen}
           onClose={() => setRightOpen(false)}
@@ -411,145 +409,94 @@ function SidebarEmpty({ tab }: { tab: Tab }) {
 // Main Content
 // ─────────────────────────────────────────────────────────────────────────────
 
-function MainContent({
-  tab,
-  profileId,
-}: {
-  tab: Tab;
-  profileId: Id<"profiles">;
-}) {
+function MainContent({ tab }: { tab: Tab }) {
   return (
     <main className="flex-1 flex flex-col overflow-hidden bg-ink">
-      {tab === "bitacora" && <HermesChat profileId={profileId} />}
-      {tab === "chat" && <DoctorChat profileId={profileId} />}
+      {tab === "bitacora" && <HermesChat />}
+      {tab === "chat" && <DoctorChat />}
       {tab === "perfil" && <PaymentsSection />}
       {tab === "marketplace" && <MarketplacePage />}
     </main>
   );
 }
 
-// ── HermesChat (Bitácora IA): asegura conversación hermes_patient y renderea
-function HermesChat({ profileId }: { profileId: Id<"profiles"> }) {
-  const ensure = useMutation(
-    api.messages.conversations.ensureHermesConversation,
-  );
-  const [conversationId, setConversationId] =
-    useState<Id<"conversations"> | null>(null);
-  const [error, setError] = useState<string | null>(null);
+// ─────────────────────────────────────────────────────────────────────────────
+// WhatsApp redirect — Hermes gestiona a todos los pacientes en paralelo por
+// WhatsApp y los deriva al especialista. Un único número (Hermes), sin cruzar
+// información entre pacientes (Hermes enruta cada hilo).
+// ─────────────────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const r = await ensure({});
-        if (!cancelled) setConversationId(r.conversationId);
-      } catch (err) {
-        const data = (err as { data?: { message?: string } }).data;
-        if (!cancelled) {
-          setError(data?.message ?? (err as Error).message);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ensure]);
+// Número de WhatsApp de Hermes (el mismo número Twilio de TWILIO_WHATSAPP_FROM,
+// en formato E.164, ej. +14155238886). Se lee de la env VITE_HERMES_WHATSAPP
+// para no hardcodear el número. Si no está seteada, la UI muestra "no configurado".
+const HERMES_WHATSAPP =
+  (import.meta.env.VITE_HERMES_WHATSAPP as string | undefined) ?? "";
 
-  if (error) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-center px-6">
-        <p className="text-soft-fawn text-sm">{error}</p>
-      </div>
-    );
-  }
-  if (!conversationId) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <span className="text-xs text-porcelain/40">Iniciando hilo…</span>
-      </div>
-    );
-  }
+function buildWhatsAppUrl(phoneE164: string, text: string): string {
+  const digits = phoneE164.replace(/[^0-9]/g, "");
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+}
+
+function WhatsAppRedirect({
+  avatarChar,
+  title,
+  description,
+  prefill,
+}: {
+  avatarChar: string;
+  title: string;
+  description: string;
+  prefill: string;
+}) {
+  const digits = HERMES_WHATSAPP.replace(/[^0-9]/g, "");
+  const configured = digits.length >= 7 && !/^0+$/.test(digits);
+  const url = buildWhatsAppUrl(HERMES_WHATSAPP, prefill);
 
   return (
-    <ChatPanel
-      conversationId={conversationId}
-      title="Bitácora IA Copiloto"
-      subtitle="Hermes responde con IA"
+    <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-graphite border border-ship-cove/40 flex items-center justify-center text-ship-cove text-2xl">
+        {avatarChar}
+      </div>
+      <h2 className="text-base font-semibold text-porcelain">{title}</h2>
+      <p className="text-sm text-porcelain/70 max-w-sm">{description}</p>
+      {configured ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#25D366] px-5 py-3 text-sm font-semibold text-white hover:brightness-110 transition"
+        >
+          <span aria-hidden className="text-lg">✆</span> Continuar en WhatsApp
+        </a>
+      ) : (
+        <p className="text-xs text-soft-fawn font-mono max-w-xs">
+          WhatsApp no configurado todavía (HERMES_WHATSAPP pendiente).
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── HermesChat (Bitácora IA): redirige a WhatsApp de Hermes
+function HermesChat() {
+  return (
+    <WhatsAppRedirect
       avatarChar="✦"
-      myProfileId={profileId}
-      inputDisabled={false}
-      notice="Estamos en fase de pruebas de mejora para la atención. Las respuestas pueden ajustarse mientras optimizamos el servicio."
+      title="Hermes — Asistente de salud"
+      description="Hermes te atiende por WhatsApp, gestiona tu seguimiento y te conecta con el especialista adecuado. Toca el botón para iniciar la conversación."
+      prefill="Hola Hermes, necesito asistencia de salud."
     />
   );
 }
 
-// ── DoctorChat (Chat Médico): asegura conversación doctor_patient si hay
-function DoctorChat({ profileId }: { profileId: Id<"profiles"> }) {
-  const ensure = useMutation(
-    api.messages.conversations.ensureDoctorConversation,
-  );
-  const [conversationId, setConversationId] =
-    useState<Id<"conversations"> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const r = await ensure({});
-        if (!cancelled) setConversationId(r.conversationId);
-      } catch (err) {
-        const data = (err as { data?: { code?: string; message?: string } }).data;
-        if (!cancelled) {
-          setError(data?.message ?? (err as Error).message);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ensure]);
-
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <span className="text-xs text-porcelain/40">Conectando…</span>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-2">
-        <div className="w-14 h-14 rounded-2xl bg-graphite border border-soft-fawn/40 flex items-center justify-center text-soft-fawn text-xl">
-          ⚕
-        </div>
-        <p className="text-sm text-porcelain/70 max-w-md">
-          Aún no tienes médico asignado. El marketplace de médicos se activará
-          cuando complete A14+.
-        </p>
-        <p className="text-[10px] text-porcelain/40 font-mono mt-2">
-          Detalle: {error}
-        </p>
-      </div>
-    );
-  }
-  if (!conversationId) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <span className="text-xs text-porcelain/40">Cargando hilo…</span>
-      </div>
-    );
-  }
+// ── DoctorChat (Chat Médico): redirige a WhatsApp; Hermes deriva al especialista
+function DoctorChat() {
   return (
-    <ChatPanel
-      conversationId={conversationId}
-      title="Chat con tu médico"
-      subtitle="Mensajes cifrados extremo a extremo en Convex"
-      avatarChar="M"
-      myProfileId={profileId}
+    <WhatsAppRedirect
+      avatarChar="⚕"
+      title="Consulta con especialista"
+      description="Hermes coordina tu atención y te deriva al especialista por WhatsApp. Toca el botón para continuar."
+      prefill="Hola, quiero coordinar una consulta con un especialista."
     />
   );
 }
