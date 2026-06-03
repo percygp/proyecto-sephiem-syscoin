@@ -13,7 +13,7 @@ endurecimiento de infra y validación de backup. Ninguno es bloqueo de código.
 
 | # | Criterio | Estado | Evidencia / bloqueo |
 |---|---|---|---|
-| 1 | Smoke test VAL-61 completo en staging | ⚠️ Parcial | Lado lectura ✅ en dev (ver `smoke-test-staging.md`); escritura/pagos requieren auth + `HD_XPUB_TESTNET` + staging desplegado |
+| 1 | Smoke test VAL-61 completo en staging | ⚠️ Parcial | Lado lectura ✅ en dev (ver `smoke-test-staging.md`); `HD_XPUB_TESTNET` ya seteado en dev (gate HD resuelto: `createAppointmentHold` pasa a fallar solo por `UNAUTHENTICATED`); escritura/pagos requieren sesión Privy + staging desplegado |
 | 2 | Calidad: typecheck + lint + build | ✅ | Los 3 pasan en local |
 | 3 | CI verde + CodeRabbit + branch protection | ❌ | VAL-48 (PAT sin `Administration:write`) |
 | 4 | PRG 14/14 con evidencia (VAL-60) | ❌ | 3/14 ✅ (ver matriz) |
@@ -27,7 +27,7 @@ endurecimiento de infra y validación de backup. Ninguno es bloqueo de código.
 | `auth_spike_validated` | técnico | ✅ | A0 validado (VAL-16): Privy customJwt ES256 |
 | `incident_response_doc` | doc | ✅ | `docs/incident-response.md` (esta sesión) |
 | `wallet_sweep_sop` | doc | ✅ | `docs/wallet-sweep-sop.md` (esta sesión) |
-| `hd_wallet_setup` | config | ⚠️ | Código ✅ (BIP44 `m/44'/57'/…`); falta `HD_XPUB_*` seteado |
+| `hd_wallet_setup` | config | ✅ dev* | Verificado en dev: `HD_XPUB_TESTNET` seteado, `deriveSyscoinAddress`→`0x558ed9…`. *Seed de PRUEBA desechable; staging/prod requieren seed segura del custodio |
 | `legal_retention_review` | legal | ⚠️ | Retención implementada (730d / 12 meses); falta revisión legal |
 | `convex_dpa` | legal | ❌ | Firma DPA |
 | `privy_dpa` | legal | ❌ | Firma DPA |
@@ -56,5 +56,13 @@ Clínico antes de cerrar esos 3 checks. El `twilio_dpa` sube de prioridad.
 4. **Legal/Clínico:** firmar DPAs (convex/privy/twilio/hosting), revisión de
    retención, y definir gobernanza del consejo médico por WhatsApp.
 5. **Ops:** vps_hardening + backup/restore validado.
+
+## ⚠️ Nota — HD wallet dev usa seed de PRUEBA
+
+`HD_XPUB_TESTNET` en el deployment dev se generó con una seed BIP39 **desechable**
+(solo testnet, sin fondos reales) para desbloquear el flujo de agendamiento y el
+smoke test. **No controla fondos de valor y NO debe usarse en staging/prod.**
+Para staging/mainnet, el custodio debe generar la seed offline y setear
+`HD_XPUB_TESTNET`/`HD_XPUB_MAINNET` propios (ver `wallet-sweep-sop.md`).
 
 Re-emitir este dictamen cuando 1-5 estén resueltos.
