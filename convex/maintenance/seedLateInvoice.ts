@@ -10,8 +10,9 @@
  *
  * Al correr confirmPaymentFromMonitor sobre la invoice resultante:
  *   withinHold === false (slot.heldUntil < now) -> outcome "late_payment":
- *   invoice.status -> "late_payment"; appointment SIGUE "pending" (no confirmado);
- *   slot NO se libera.
+ *   invoice.status -> "late_payment"; appointment -> "pending_payment_late"
+ *   (entra a la cola admin listLatePaymentAppointments, con txHash/monto
+ *   preservados); slot NO se libera.
  *
  * Idempotente: reutiliza un scaffold SMOKE-LATE aún sin procesar (invoice
  * "pending" con código "SPH-SMOKE-LATE-*", appointment "pending", slot "held").
