@@ -93,6 +93,8 @@ export interface AnchorRecordResult {
   recordId: Hex;
   hash: Hex;
   txHash: Hex;
+  // Necesario para reproducir/verificar el hash a partir del documento persistido.
+  timestamp: number;
 }
 
 export function useSyscoin() {
@@ -115,8 +117,11 @@ export function useSyscoin() {
     });
     try {
       await client.switchChain({ id: zkTanenbaum.id });
-    } catch {
-      // La red no existe en la wallet → agregarla y reintentar.
+    } catch (error) {
+      // Solo añadir la red cuando la wallet no la conoce (EIP-3326: code 4902).
+      // El resto (4001 rechazo del usuario, errores transitorios) se propaga.
+      const code = (error as { code?: number }).code;
+      if (code !== 4902) throw error;
       await client.addChain({ chain: zkTanenbaum });
       await client.switchChain({ id: zkTanenbaum.id });
     }
@@ -175,12 +180,14 @@ export function useSyscoin() {
   const anchorRecord = useCallback(
     async (params: AnchorRecordParams): Promise<AnchorRecordResult> => {
       const { client, account } = await getWalletClient();
+      // Capturar el timestamp para devolverlo y permitir reconstruir el hash.
+      const timestamp = Date.now();
       const hash = generateDocumentHash({
         tipo: params.tipo,
         paciente: params.paciente,
         medico: account,
         contenido: params.contenido,
-        timestamp: Date.now(),
+        timestamp,
       });
       const txHash = await client.writeContract({
         ...CONTRACTS.MedicalRecordRegistry,
@@ -210,7 +217,7 @@ export function useSyscoin() {
           // log de otro contrato/evento — ignorar
         }
       }
-      return { recordId, hash, txHash };
+      return { recordId, hash, txHash, timestamp };
     },
     [getWalletClient],
   );

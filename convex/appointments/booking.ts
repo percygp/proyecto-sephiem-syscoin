@@ -305,9 +305,14 @@ export async function confirmAppointmentPayment(
   }
 
   // Pago tardío / fuera de hold: NO confirma cita, NO libera slot.
-  // Marca la cita para que entre en la cola de revisión admin (listLatePaymentAppointments).
+  // Marca la cita para la cola de revisión admin (listLatePaymentAppointments) y
+  // preserva la evidencia on-chain del pago recibido (txHash + monto) en el
+  // appointment, que es donde el schema almacena esos campos (paymentInvoices no
+  // los tiene; ver rama withinHold arriba y appointment.amountPaidSYS en payouts).
   await ctx.db.patch("appointments", appointment._id, {
     status: "pending_payment_late",
+    txHash,
+    amountPaidSYS,
   });
   await ctx.db.patch("paymentInvoices", invoice._id, { status: "late_payment" });
   await ctx.runMutation(internal.audit.log, {

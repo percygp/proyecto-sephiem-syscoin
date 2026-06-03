@@ -29,7 +29,7 @@ wagmi, Next ni ethers.
 
 ## Estructura
 
-```
+```text
 src/web3/
 ├── abis/                 ABIs `as const` (inferencia de tipos viem)
 ├── chain.ts              defineChain zkTanenbaum + helpers de explorer
