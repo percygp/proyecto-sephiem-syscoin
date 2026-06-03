@@ -88,3 +88,24 @@ CLI verificable (admin): crons `appointments/jobs:updatePayoutStatuses`,
 Todas las fases ✅, cero PHI/secretos en logs, flujos de pago tardío/payout según
 spec, feature flags bloquean correctamente. El resultado alimenta el dictamen
 GO/NO-GO (VAL-62) y los checks técnicos del PRG (VAL-60).
+
+---
+
+## Registro de ejecución — lado lectura (dev `exciting-dragon-400`, 2026-06-03)
+
+Ejecutado por CLI sin auth contra el deployment dev con datos sintéticos ya
+sembrados (`seedTestData` → `skipped:true`, sentinel `test|spec-1` presente).
+
+| Paso | Comando | Resultado |
+|---|---|---|
+| Marketplace listing | `getSpecialists {paginationOpts:{cursor:null,numItems:10}}` | ✅ 3 especialistas `isVerifiedByAdmin=true` (Cardiología/Dermatología/Pediatría) |
+| Rating tiempo real | (campo `rating` del listing) | ✅ Cardiología 4.5 = avg(5,4) de 2 reviews del seed |
+| Slots disponibles | `getAvailableSlots {specialistId:<card>}` | ✅ slots futuros `available` (mañana 09:00+) |
+| Detalle | `getSpecialistDetail {specialistId:<card>}` | ✅ rating 4.5, `walletVerified:true` |
+| RBAC (Fase 4.1) | payload de `getSpecialists`/`getSpecialistDetail` | ✅ **sin** `walletAddress` (solo `walletVerified`) — VAL-59 OK |
+
+**Pendiente (lado escritura/auth, NO ejecutable por CLI):** Fases 2.1-2.5, 3,
+4.3, 5 requieren sesión Privy autenticada y/o `HD_XPUB_TESTNET` seteado
+(`createAppointmentHold` falla hoy con `HD_WALLET_NOT_CONFIGURED`). Fase 4.3
+(Hermes) queda **obsoleta** por el pivot chat→WhatsApp (Hermes ya no responde en
+el portal). Ver `docs/go-no-go.md`.
