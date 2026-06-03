@@ -81,9 +81,9 @@ export async function processPayoutCore(
         });
       }
       break;
-      default:
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-        throw new ConvexError({ code: "PAYOUT_INVALID_STATE", message: `Estado inválido: ${payout.status}` });
+    default:
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      throw new ConvexError({ code: "PAYOUT_INVALID_STATE", message: `Estado inválido: ${payout.status}` });
   }
 
   // Transición atómica a processing (Convex serializa mutations → evita doble envío).

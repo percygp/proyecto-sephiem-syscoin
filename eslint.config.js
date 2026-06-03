@@ -16,6 +16,9 @@ export default defineConfig([
       "tailwind.config.js",
       "vite.config.ts",
       "vps/**",
+      // Sub-proyecto de referencia (contratos + frontend Next.js standalone).
+      // Tiene su propio toolchain; no se lintea desde la app principal.
+      "proyecto-sephiem-syscoin/**",
     ],
   },
   {

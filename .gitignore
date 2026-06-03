@@ -35,3 +35,11 @@ dist-ssr
 
 # Scratch
 /tmp/
+
+# Sub-proyecto de referencia Sephiem-Syscoin: ignorar binarios pesados y deps.
+# El código (contracts/, frontend/, docs) sí se versiona; la capa on-chain
+# integrada en la app principal vive en src/web3/.
+proyecto-sephiem-syscoin/**/node_modules
+proyecto-sephiem-syscoin/*.pdf
+proyecto-sephiem-syscoin/contracts/artifacts/
+proyecto-sephiem-syscoin/contracts/cache/

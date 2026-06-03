@@ -47,14 +47,24 @@ export const seedPendingSpecialists = internalMutation({
     for (const f of fixtures) {
       if (existingWallets.has(f.walletAddress)) continue;
 
-      const profileId = await ctx.db.insert("profiles", {
-        tokenIdentifier: `seed-pending|${f.walletAddress}`,
-        walletAddress: f.walletAddress,
-        role: "patient",
-        name: f.name,
-        email: f.email,
-        isActive: true,
-      });
+      // Idempotencia: reutiliza el profile existente por tokenIdentifier en vez de duplicar.
+      const tokenIdentifier = `seed-pending|${f.walletAddress}`;
+      const existingProfile = await ctx.db
+        .query("profiles")
+        .withIndex("by_tokenIdentifier", (q) =>
+          q.eq("tokenIdentifier", tokenIdentifier),
+        )
+        .unique();
+      const profileId =
+        existingProfile?._id ??
+        (await ctx.db.insert("profiles", {
+          tokenIdentifier,
+          walletAddress: f.walletAddress,
+          role: "patient",
+          name: f.name,
+          email: f.email,
+          isActive: true,
+        }));
 
       await ctx.db.insert("marketplaceSpecialists", {
         profileId,

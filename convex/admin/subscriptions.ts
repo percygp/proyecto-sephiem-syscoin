@@ -69,7 +69,8 @@ export const extendSubscription = mutation({
       throw new ConvexError({ code: "PATIENT_NOT_FOUND", message: "Paciente no existe" });
     }
     const now = Date.now();
-    const currentExpiry = patient.subscriptionExpiresAt ?? now;
+    // Si el vencimiento actual ya pasó, extender desde `now` (no desde la fecha vencida).
+    const currentExpiry = Math.max(patient.subscriptionExpiresAt ?? 0, now);
     const newExpiry = currentExpiry + args.months * 30 * 24 * 60 * 60 * 1000;
     await ctx.db.patch("patients", args.patientId, {
       subscriptionStatus: "active",

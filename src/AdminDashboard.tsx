@@ -228,8 +228,8 @@ function AdminSidebar({
 }) {
   return (
     <aside
-      className={`fixed top-14 bottom-0 right-0 z-40 w-72 max-w-[85%] border-l border-mist bg-ink p-4 overflow-y-auto flex flex-col gap-4 transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-transparent lg:shrink-0 ${
-        open ? "translate-x-0" : "translate-x-full"
+      className={`fixed top-14 bottom-0 right-0 z-40 w-72 max-w-[85%] border-l border-mist bg-ink p-4 overflow-y-auto flex flex-col gap-4 transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-transparent lg:shrink-0 lg:visible ${
+        open ? "translate-x-0" : "translate-x-full invisible"
       }`}
     >
       <button

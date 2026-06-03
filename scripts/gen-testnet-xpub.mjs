@@ -18,10 +18,19 @@
 import { generateMnemonic, mnemonicToSeedSync } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { HDKey } from "@scure/bip32";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 
 // Path testnet que espera hdwallet.ts (account 1' + change 0)
 const PATH = "m/44'/57'/1'/0";
+const SEED_FILE = ".secrets/hd-testnet-seed.txt";
+
+// Fail-fast: nunca sobrescribir una seed ya generada (desalinearía el xpub desplegado).
+if (existsSync(SEED_FILE)) {
+  console.error(
+    `ERROR: ${SEED_FILE} ya existe. Borra el archivo a mano si realmente quieres regenerar la seed (esto invalida el xpub desplegado).`,
+  );
+  process.exit(1);
+}
 
 const mnemonic = generateMnemonic(wordlist, 256); // 24 palabras
 const seed = mnemonicToSeedSync(mnemonic);
@@ -32,7 +41,7 @@ const xpub = node.publicExtendedKey;
 // Guardar mnemonic SOLO localmente (gitignored)
 mkdirSync(".secrets", { recursive: true });
 writeFileSync(
-  ".secrets/hd-testnet-seed.txt",
+  SEED_FILE,
   `# Sephiem HD testnet seed (Syscoin Tanenbaum, chainId 5700) — DESECHABLE\n` +
     `# Path xpub: ${PATH}\n` +
     `# Generado: ${new Date().toISOString()}\n` +

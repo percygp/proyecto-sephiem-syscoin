@@ -19,6 +19,7 @@
 import { ConvexError, v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
 import { assertUnique } from "../lib/unique";
 
 const SYSCOIN_TESTNET_CHAIN_ID = 5700;
@@ -80,22 +81,26 @@ export const seedConfirmableAppointment = internalMutation({
       .query("appointmentSlots")
       .withIndex("by_status", (q) => q.eq("status", "available"))
       .collect();
-    const slot = availableSlots.find((s) => s.startTime > now);
-    if (!slot) {
+    // Recorre los slots futuros hasta encontrar uno con especialista resoluble
+    // (no asumir que el primer slot futuro tiene un specialistId válido).
+    let slot: Doc<"appointmentSlots"> | undefined;
+    let specialist: Doc<"marketplaceSpecialists"> | null = null;
+    for (const candidate of availableSlots) {
+      if (candidate.startTime <= now) continue;
+      const resolved = await ctx.db.get(
+        "marketplaceSpecialists",
+        candidate.specialistId,
+      );
+      if (!resolved) continue;
+      slot = candidate;
+      specialist = resolved;
+      break;
+    }
+    if (!slot || !specialist) {
       throw new ConvexError({
         code: "NO_AVAILABLE_SLOT",
-        message: "No hay appointmentSlots 'available' futuros",
-      });
-    }
-
-    const specialist = await ctx.db.get(
-      "marketplaceSpecialists",
-      slot.specialistId,
-    );
-    if (!specialist) {
-      throw new ConvexError({
-        code: "SPECIALIST_NOT_FOUND",
-        message: "El especialista del slot no existe",
+        message:
+          "No hay appointmentSlots 'available' futuros con especialista válido",
       });
     }
     const amountExpected = specialist.consultationFeeSYS;

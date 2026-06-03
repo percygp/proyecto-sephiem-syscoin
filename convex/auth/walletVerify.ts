@@ -141,7 +141,7 @@ export const consumeNonceAndSaveWallet = internalMutation({
         message: "Solicita un nonce primero con requestWalletNonce",
       });
     }
-    if (nonceRecord.expiresAt < now) {
+    if (nonceRecord.expiresAt <= now) {
       // Limpiar el nonce expirado antes de lanzar
       await ctx.db.delete("walletNonces", nonceRecord._id);
       throw new ConvexError({

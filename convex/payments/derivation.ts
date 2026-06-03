@@ -45,6 +45,8 @@ export const getNextDerivationIndex = internalMutation({
     const current = setting.value;
     const next = current + 1;
 
+    // NOTA: la regla eslint @convex-dev/explicit-table-ids exige el nombre de tabla
+    // explícito; mantenemos la firma de 3 args (CodeRabbit lo marcó opcional).
     await ctx.db.patch("systemSettings", setting._id, {
       value: next,
       updatedAt: Date.now(),

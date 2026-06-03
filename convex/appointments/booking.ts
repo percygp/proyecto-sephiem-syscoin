@@ -305,6 +305,10 @@ export async function confirmAppointmentPayment(
   }
 
   // Pago tardío / fuera de hold: NO confirma cita, NO libera slot.
+  // Marca la cita para que entre en la cola de revisión admin (listLatePaymentAppointments).
+  await ctx.db.patch("appointments", appointment._id, {
+    status: "pending_payment_late",
+  });
   await ctx.db.patch("paymentInvoices", invoice._id, { status: "late_payment" });
   await ctx.runMutation(internal.audit.log, {
     actorType: "system",

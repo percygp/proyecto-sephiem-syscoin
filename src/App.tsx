@@ -9,6 +9,7 @@ import { ChatPanel } from "./ChatPanel";
 import { NotificationsBell } from "./NotificationsBell";
 import { PaymentsSection } from "./PaymentsSection";
 import { MarketplacePage } from "./MarketplacePage";
+import { useSyscoinNetwork, explorerAddress } from "./web3";
 import type { Id } from "../convex/_generated/dataModel";
 
 type Tab = "perfil" | "bitacora" | "marketplace" | "chat";
@@ -52,8 +53,14 @@ export default function App() {
         <Header
           activeTab={activeTab}
           onTabChange={selectTab}
-          onToggleLeft={() => setLeftOpen((v) => !v)}
-          onToggleRight={() => setRightOpen((v) => !v)}
+          onToggleLeft={() => {
+            setLeftOpen((v) => !v);
+            setRightOpen(false);
+          }}
+          onToggleRight={() => {
+            setRightOpen((v) => !v);
+            setLeftOpen(false);
+          }}
         />
         <div className="flex-1 flex overflow-hidden">
           <LeftSidebar
@@ -363,8 +370,8 @@ function LeftSidebar({
 
   return (
     <aside
-      className={`fixed top-14 bottom-0 left-0 z-40 w-72 max-w-[85%] border-r border-mist bg-graphite flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-graphite/40 ${
-        open ? "translate-x-0" : "-translate-x-full"
+      className={`fixed top-14 bottom-0 left-0 z-40 w-72 max-w-[85%] border-r border-mist bg-graphite flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-graphite/40 lg:visible ${
+        open ? "translate-x-0" : "-translate-x-full invisible"
       }`}
     >
       <div className="px-4 py-3 border-b border-mist flex items-center justify-between">
@@ -576,10 +583,13 @@ function RightSidebar({
     !!address &&
     verifiedAddress.toLowerCase() === address.toLowerCase();
 
+  // Datos en vivo de zkSYS Testnet (contratos Sephiem-Syscoin).
+  const net = useSyscoinNetwork(address);
+
   return (
     <aside
-      className={`fixed top-14 bottom-0 right-0 z-40 w-72 max-w-[85%] border-l border-mist bg-graphite flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-graphite/40 ${
-        open ? "translate-x-0" : "translate-x-full"
+      className={`fixed top-14 bottom-0 right-0 z-40 w-72 max-w-[85%] border-l border-mist bg-graphite flex flex-col overflow-hidden transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 lg:bg-graphite/40 lg:visible ${
+        open ? "translate-x-0" : "translate-x-full invisible"
       }`}
     >
       <div className="px-4 py-3 border-b border-mist flex items-center justify-between">
@@ -626,16 +636,42 @@ function RightSidebar({
           )}
 
           <div className="grid grid-cols-2 gap-2 mt-3">
-            <BalanceCard label="Saldo SYS" value="—" symbol="SYS" />
-            <BalanceCard label="Saldo ETH" value="—" symbol="ETH" />
+            <BalanceCard
+              label="Saldo SYS"
+              value={net.balanceSys ?? "—"}
+              symbol="SYS"
+            />
+            <BalanceCard
+              label="Bloque"
+              value={net.blockNumber !== null ? `#${net.blockNumber}` : "—"}
+              symbol=""
+            />
           </div>
+          {address && (
+            <a
+              href={explorerAddress(address)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block mt-2 text-[10px] text-royal-azure hover:underline font-mono truncate"
+            >
+              Ver en explorer ↗
+            </a>
+          )}
         </div>
 
-        {/* Red activa */}
+        {/* Red activa — zkSYS Testnet en vivo */}
         <div className="border border-mist rounded-lg p-3 bg-graphite">
-          <DataRow label="Red Activa:" value="MetaMask" success />
-          <DataRow label="ID Cadena:" value="5700 (SYS Testnet)" mono />
-          <DataRow label="Bloque Actual:" value="—" mono />
+          <DataRow
+            label="Red Activa:"
+            value={net.online ? net.chainName : "Sin conexión RPC"}
+            success={net.online}
+          />
+          <DataRow label="ID Cadena:" value={`${net.chainId} (zkSYS)`} mono />
+          <DataRow
+            label="Bloque Actual:"
+            value={net.blockNumber !== null ? `#${net.blockNumber}` : "…"}
+            mono
+          />
           <DataRow label="Seguridad:" value="Privy ES256" mono last />
         </div>
 
