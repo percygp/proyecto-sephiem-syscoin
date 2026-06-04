@@ -432,9 +432,15 @@ function MainContent({ tab }: { tab: Tab }) {
 const HERMES_WHATSAPP =
   (import.meta.env.VITE_HERMES_WHATSAPP as string | undefined) ?? "";
 
+// Mínimo razonable de dígitos para considerar un número marcable (E.164).
+const MIN_PHONE_DIGITS = 8;
+
+function normalizePhoneDigits(phoneE164: string): string {
+  return phoneE164.replace(/[^0-9]/g, "");
+}
+
 function buildWhatsAppUrl(phoneE164: string, text: string): string {
-  const digits = phoneE164.replace(/[^0-9]/g, "");
-  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/${normalizePhoneDigits(phoneE164)}?text=${encodeURIComponent(text)}`;
 }
 
 function WhatsAppRedirect({
@@ -448,8 +454,8 @@ function WhatsAppRedirect({
   description: string;
   prefill: string;
 }) {
-  const digits = HERMES_WHATSAPP.replace(/[^0-9]/g, "");
-  const configured = digits.length >= 7 && !/^0+$/.test(digits);
+  const digits = normalizePhoneDigits(HERMES_WHATSAPP);
+  const configured = digits.length >= MIN_PHONE_DIGITS && !/^0+$/.test(digits);
   const url = buildWhatsAppUrl(HERMES_WHATSAPP, prefill);
 
   return (
@@ -469,8 +475,9 @@ function WhatsAppRedirect({
           <span aria-hidden className="text-lg">✆</span> Continuar en WhatsApp
         </a>
       ) : (
-        <p className="text-xs text-soft-fawn font-mono max-w-xs">
-          WhatsApp no configurado todavía (HERMES_WHATSAPP pendiente).
+        <p className="text-xs text-soft-fawn max-w-xs">
+          El servicio de WhatsApp no está disponible en este momento. Inténtalo
+          de nuevo más tarde.
         </p>
       )}
     </div>

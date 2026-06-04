@@ -105,7 +105,8 @@ sembrados (`seedTestData` → `skipped:true`, sentinel `test|spec-1` presente).
 | RBAC (Fase 4.1) | payload de `getSpecialists`/`getSpecialistDetail` | ✅ **sin** `walletAddress` (solo `walletVerified`) — VAL-59 OK |
 
 **Pendiente (lado escritura/auth, NO ejecutable por CLI):** Fases 2.1-2.5, 3,
-4.3, 5 requieren sesión Privy autenticada y/o `HD_XPUB_TESTNET` seteado
-(`createAppointmentHold` falla hoy con `HD_WALLET_NOT_CONFIGURED`). Fase 4.3
-(Hermes) queda **obsoleta** por el pivot chat→WhatsApp (Hermes ya no responde en
-el portal). Ver `docs/go-no-go.md`.
+4.3, 5 requieren sesión Privy autenticada. (Gate HD **resuelto** 2026-06-04:
+`HD_XPUB_TESTNET` seteado en dev → `createAppointmentHold` ya NO falla por
+`HD_WALLET_NOT_CONFIGURED`, solo por `UNAUTHENTICATED`.) Fase 4.3 (Hermes
+in-portal) queda **obsoleta** por el pivot chat→WhatsApp; el modo es híbrido
+(humano WhatsApp + IA backend). Ver `docs/go-no-go.md`.

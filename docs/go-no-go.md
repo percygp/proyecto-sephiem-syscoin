@@ -15,8 +15,8 @@ endurecimiento de infra y validación de backup. Ninguno es bloqueo de código.
 |---|---|---|---|
 | 1 | Smoke test VAL-61 completo en staging | ⚠️ Parcial | Lado lectura ✅ en dev (ver `smoke-test-staging.md`); `HD_XPUB_TESTNET` ya seteado en dev (gate HD resuelto: `createAppointmentHold` pasa a fallar solo por `UNAUTHENTICATED`); escritura/pagos requieren sesión Privy + staging desplegado |
 | 2 | Calidad: typecheck + lint + build | ✅ | Los 3 pasan en local |
-| 3 | CI verde + CodeRabbit + branch protection | ❌ | VAL-48 (PAT sin `Administration:write`) |
-| 4 | PRG 14/14 con evidencia (VAL-60) | ❌ | 3/14 ✅ (ver matriz) |
+| 3 | CI verde + CodeRabbit + branch protection | ✅ | VAL-48 completado 2026-06-04 (main+staging: 4 checks, 1 approval, enforce_admins, no force-push) |
+| 4 | PRG 14/14 con evidencia (VAL-60) | ❌ | 4/14 ✅ (ver matriz) |
 | 5 | Cero PHI/secretos en logs | ✅ | `logging-policy.md`; RBAC verificado (no `walletAddress` en queries públicas) |
 | 6 | Entornos staging+prod operativos | ❌ | VAL-45/66/63/65/67 (Convex/Railway/Privy) |
 
