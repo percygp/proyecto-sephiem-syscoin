@@ -30,6 +30,11 @@ dist-ssr
 .env.staging
 .env.production
 
+# Discord bot secrets — nunca versionar
+discord/.env
+discord/.env.local
+discord/.env.*
+
 # Secretos locales (mnemonics/seeds HD — NUNCA versionar)
 .secrets/
 

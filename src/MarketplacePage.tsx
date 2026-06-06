@@ -13,6 +13,9 @@ import { useEffect, useState } from "react";
 import { usePaginatedQuery, useQuery, useAction, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
+import { useSyscoin } from "./web3/useSyscoin";
+import { explorerTx } from "./web3/chain";
+import type { Address } from "viem";
 
 type ApptStatus =
   | "pending"
@@ -43,6 +46,46 @@ function fmtDateTime(ts: number): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function fmtDay(ts: number): string {
+  return new Date(ts).toLocaleDateString("es", {
+    weekday: "long",
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+function fmtHour(ts: number): string {
+  return new Date(ts).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+}
+
+type SlotOption = {
+  startTime: number;
+  endTime: number;
+  slotId?: Id<"appointmentSlots">;
+};
+
+function generateDefaultSlots(): SlotOption[] {
+  const slots: SlotOption[] = [];
+  const day = new Date();
+  day.setDate(day.getDate() + 1);
+  day.setHours(0, 0, 0, 0);
+  let businessDays = 0;
+  while (businessDays < 5) {
+    const dow = day.getDay();
+    if (dow >= 1 && dow <= 5) {
+      for (let h = 9; h < 17; h++) {
+        if (h === 13) continue;
+        const d = new Date(day);
+        d.setHours(h, 0, 0, 0);
+        slots.push({ startTime: d.getTime(), endTime: d.getTime() + 3_600_000 });
+      }
+      businessDays++;
+    }
+    day.setDate(day.getDate() + 1);
+  }
+  return slots;
 }
 
 function Stars({ rating }: { rating: number | null }) {
@@ -145,6 +188,12 @@ function SpecialistsList({
 
   return (
     <>
+      <div className="mb-5">
+        <h1 className="text-base font-semibold mb-0.5">Especialistas verificados</h1>
+        <p className="text-xs text-porcelain/55">
+          Selecciona un especialista para ver su perfil y agendar una cita. La cita queda registrada en la blockchain de Syscoin zkEVM con tu firma.
+        </p>
+      </div>
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <input
           value={specialty}
@@ -156,7 +205,7 @@ function SpecialistsList({
           value={maxFee}
           onChange={(e) => setMaxFee(e.target.value)}
           inputMode="decimal"
-          placeholder="Fee máx (SYS)"
+          placeholder="Precio máx (S/.)"
           className="sm:w-40 bg-slate border border-mist rounded-lg px-3 py-2 text-sm text-porcelain placeholder:text-porcelain/30 focus:outline-none focus:border-royal-azure"
         />
       </div>
@@ -180,7 +229,7 @@ function SpecialistsList({
               <Stars rating={s.rating} />
               <div className="mt-3 text-sm text-porcelain/70">
                 <span className="text-soft-fawn font-semibold">
-                  {s.consultationFeeSYS} SYS
+                  S/. {s.consultationFeeSYS}
                 </span>
                 <span className="text-porcelain/40"> / consulta</span>
               </div>
@@ -215,22 +264,21 @@ function SpecialistDetail({
   specialistId: Id<"marketplaceSpecialists">;
   onBack: () => void;
 }) {
-  const detail = useQuery(api.marketplace.specialists.getSpecialistDetail, {
-    specialistId,
-  });
-  const slots = useQuery(api.appointments.queries.getAvailableSlots, {
-    specialistId,
-  });
-  const createHold = useAction(api.appointments.booking.createAppointmentHold);
+  const detail      = useQuery(api.marketplace.specialists.getSpecialistDetail, { specialistId });
+  const realSlots   = useQuery(api.appointments.queries.getAvailableSlots, { specialistId });
+  const doctorWallet = useQuery(api.marketplace.specialists.getSpecialistWalletForBooking, { specialistId });
+  const createHold  = useAction(api.appointments.booking.createAppointmentHold);
+  const saveOnChain = useMutation(api.appointments.booking.saveOnChainData);
+  const { bookAppointmentOnChain, ready: walletReady } = useSyscoin();
 
+  const [showModal, setShowModal] = useState(false);
   const [booking, setBooking] = useState<{
     appointmentId: Id<"appointments">;
     derivedAddress: string;
     amountExpected: string;
     startedAt: number;
+    onChainTxHash: string;
   } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   if (booking) {
     return (
@@ -239,38 +287,16 @@ function SpecialistDetail({
         derivedAddress={booking.derivedAddress}
         amountExpected={booking.amountExpected}
         startedAt={booking.startedAt}
+        onChainTxHash={booking.onChainTxHash}
         onDone={onBack}
       />
     );
   }
 
-  async function reserve(slotId: Id<"appointmentSlots">) {
-    setError(null);
-    setBusy(true);
-    try {
-      const r = await createHold({ slotId });
-      setBooking({
-        appointmentId: r.appointmentId,
-        derivedAddress: r.derivedAddress,
-        amountExpected: r.amountExpected,
-        // eslint-disable-next-line react-hooks/purity
-        startedAt: Date.now(),
-      });
-    } catch (err) {
-      const data = (err as { data?: { message?: string } }).data;
-      setError(data?.message ?? (err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-2xl mx-auto">
-        <button
-          onClick={onBack}
-          className="text-sm text-porcelain/60 hover:text-porcelain mb-4"
-        >
+        <button onClick={onBack} className="text-sm text-porcelain/60 hover:text-porcelain mb-4">
           ← Volver al marketplace
         </button>
 
@@ -289,57 +315,244 @@ function SpecialistDetail({
               </div>
               <VerifiedBadge />
             </div>
-            <div className="mt-4">
+            <div className="mt-3">
               <Stars rating={detail.rating} />
             </div>
-            <dl className="grid grid-cols-2 gap-3 mt-5 text-sm">
+            <dl className="grid grid-cols-2 gap-3 mt-4 text-sm">
               <Field label="Licencia" value={detail.licenseNumber} />
               <Field label="Jurisdicción" value={detail.jurisdiction} />
               <Field
                 label="Experiencia"
                 value={detail.yearsOfExperience !== undefined ? `${detail.yearsOfExperience} años` : "—"}
               />
-              <Field label="Fee" value={`${detail.consultationFeeSYS} SYS`} />
-              <Field label="Wallet" value={detail.walletVerified ? "Verificada ✓" : "No verificada"} />
+              <Field label="Tarifa" value={`S/. ${detail.consultationFeeSYS}`} />
             </dl>
             {detail.description && (
-              <p className="mt-5 text-sm text-porcelain/70 leading-relaxed">{detail.description}</p>
+              <p className="mt-4 text-sm text-porcelain/70 leading-relaxed">{detail.description}</p>
             )}
 
-            {/* Disponibilidad */}
-            <h2 className="text-sm font-semibold mt-6 mb-2 text-porcelain/80">
-              Horarios disponibles
-            </h2>
-            {error && (
-              <div className="mb-3 text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">
-                {error}
-              </div>
-            )}
-            {slots === undefined ? (
-              <p className="text-sm text-porcelain/40">Cargando horarios…</p>
-            ) : slots.length === 0 ? (
-              <p className="text-sm text-porcelain/40">
-                No hay horarios disponibles por ahora.
+            <div className="mt-6 pt-5 border-t border-mist">
+              <button
+                onClick={() => setShowModal(true)}
+                className="w-full py-3 rounded-xl bg-royal-azure text-white text-sm font-semibold hover:bg-royal-azure/90 transition-colors flex items-center justify-center gap-2"
+              >
+                <span>📅</span> Agendar Cita
+              </button>
+              <p className="text-[11px] text-porcelain/35 mt-2 text-center font-mono">
+                ⛓ Se registrará en Syscoin zkEVM · Requiere firma con MetaMask
               </p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {slots.map((s) => (
-                  <button
-                    key={s._id}
-                    disabled={busy}
-                    onClick={() => void reserve(s._id)}
-                    className="text-xs px-2 py-2 rounded-lg border border-mist hover:border-royal-azure/60 text-porcelain/80 disabled:opacity-40"
-                  >
-                    {fmtDateTime(s.startTime)}
-                  </button>
-                ))}
-              </div>
-            )}
-            <p className="text-[11px] text-porcelain/40 mt-2">
-              Al reservar tienes 15 min para pagar en SYS antes de que el horario se libere.
-            </p>
+            </div>
           </div>
         )}
+      </div>
+
+      {showModal && detail && (
+        <BookingModal
+          detail={detail}
+          doctorWalletAddress={doctorWallet?.walletAddress ?? null}
+          walletReady={walletReady}
+          realSlots={realSlots}
+          bookAppointmentOnChain={bookAppointmentOnChain}
+          createHold={createHold}
+          saveOnChain={saveOnChain}
+          onClose={() => setShowModal(false)}
+          onHoldCreated={(data) => { setShowModal(false); setBooking(data); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BookingModal({
+  detail,
+  doctorWalletAddress,
+  walletReady,
+  realSlots,
+  bookAppointmentOnChain,
+  createHold,
+  saveOnChain,
+  onClose,
+  onHoldCreated,
+}: {
+  detail: { name: string; specialty: string; consultationFeeSYS: string };
+  doctorWalletAddress: string | null;
+  walletReady: boolean;
+  realSlots: Array<{ _id: Id<"appointmentSlots">; startTime: number; endTime: number }> | undefined;
+  bookAppointmentOnChain: (addr: Address, ts: number) => Promise<{ appointmentId: string; txHash: string }>;
+  createHold: (args: { slotId: Id<"appointmentSlots"> }) => Promise<{ appointmentId: Id<"appointments">; derivedAddress: string; amountExpected: string }>;
+  saveOnChain: (args: { appointmentId: Id<"appointments">; onChainTxHash: string; onChainAppointmentId: string }) => Promise<null>;
+  onClose: () => void;
+  onHoldCreated: (data: { appointmentId: Id<"appointments">; derivedAddress: string; amountExpected: string; startedAt: number; onChainTxHash: string }) => void;
+}) {
+  const [selected, setSelected] = useState<SlotOption | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
+
+  const displaySlots: SlotOption[] =
+    realSlots && realSlots.length > 0
+      ? realSlots.map((s) => ({ startTime: s.startTime, endTime: s.endTime, slotId: s._id }))
+      : generateDefaultSlots();
+
+  const byDay = new Map<string, SlotOption[]>();
+  for (const s of displaySlots) {
+    const key = fmtDay(s.startTime);
+    const arr = byDay.get(key) ?? [];
+    arr.push(s);
+    byDay.set(key, arr);
+  }
+
+  async function confirmar() {
+    if (!selected) return;
+    if (!walletReady) { setError("Conecta tu wallet MetaMask para continuar."); return; }
+    if (!doctorWalletAddress) { setError("El especialista no tiene wallet registrada."); return; }
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await bookAppointmentOnChain(doctorWalletAddress as Address, selected.startTime);
+      if (selected.slotId) {
+        const r = await createHold({ slotId: selected.slotId });
+        await saveOnChain({
+          appointmentId: r.appointmentId,
+          onChainTxHash: result.txHash,
+          onChainAppointmentId: result.appointmentId,
+        });
+        onHoldCreated({
+          appointmentId: r.appointmentId,
+          derivedAddress: r.derivedAddress,
+          amountExpected: r.amountExpected,
+          startedAt: Date.now(),
+          onChainTxHash: result.txHash,
+        });
+      } else {
+        setTxHash(result.txHash);
+      }
+    } catch (err) {
+      const data = (err as { data?: { message?: string } }).data;
+      setError(data?.message ?? (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/70 backdrop-blur-sm">
+      <div className="bg-graphite border border-mist rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-mist shrink-0">
+          <div>
+            <h2 className="font-semibold text-base">Agendar Cita</h2>
+            <p className="text-xs text-porcelain/50">{detail.name} · {detail.specialty}</p>
+          </div>
+          <button onClick={onClose} className="text-porcelain/40 hover:text-porcelain text-xl leading-none w-8 h-8 flex items-center justify-center rounded-lg hover:bg-mist/30">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-5 py-4">
+          {txHash ? (
+            <div className="text-center py-8">
+              <div className="text-5xl mb-4">✅</div>
+              <h3 className="font-semibold text-base mb-1">¡Cita registrada en blockchain!</h3>
+              <p className="text-xs text-porcelain/55 mb-5">
+                {selected && <span className="block mb-1 text-porcelain/80">{fmtDay(selected.startTime)} — {fmtHour(selected.startTime)}</span>}
+                Tu cita quedó registrada en Syscoin zkEVM.
+              </p>
+              <a
+                href={explorerTx(txHash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-royal-azure border border-royal-azure/40 px-4 py-2 rounded-lg hover:bg-royal-azure/10 transition-colors"
+              >
+                <span>⛓</span> Ver en blockchain ↗
+              </a>
+              <p className="text-[10px] font-mono text-porcelain/30 mt-4 break-all px-4">{txHash}</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-royal-azure/10 text-royal-azure border border-royal-azure/30">
+                  ⛓ On-chain · Syscoin zkEVM
+                </span>
+                <span className="text-xs text-porcelain/50">S/. {detail.consultationFeeSYS} / consulta</span>
+              </div>
+
+              {!walletReady && (
+                <div className="mb-3 text-sm text-soft-fawn bg-soft-fawn/10 border border-soft-fawn/30 rounded-lg px-3 py-2">
+                  Conecta tu wallet MetaMask para agendar.
+                </div>
+              )}
+              {error && (
+                <div className="mb-3 text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">
+                  {error}
+                </div>
+              )}
+
+              {realSlots === undefined ? (
+                <p className="text-sm text-porcelain/40 py-6 text-center">Cargando horarios…</p>
+              ) : (
+                <div className="space-y-5">
+                  {Array.from(byDay.entries()).map(([day, daySlots]) => (
+                    <div key={day}>
+                      <p className="text-[11px] uppercase tracking-wider text-porcelain/40 font-mono mb-2 capitalize">{day}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {daySlots.map((s) => (
+                          <button
+                            key={s.startTime}
+                            disabled={busy}
+                            onClick={() => setSelected(s)}
+                            className={
+                              "text-xs px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-40 " +
+                              (selected?.startTime === s.startTime
+                                ? "border-royal-azure bg-royal-azure/15 text-royal-azure font-semibold"
+                                : "border-mist hover:border-royal-azure/50 text-porcelain/70")
+                            }
+                          >
+                            {fmtHour(s.startTime)}
+                            {s.slotId && <span className="ml-1 text-[9px] text-success">●</span>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-mist shrink-0">
+          {txHash ? (
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 rounded-xl border border-mist text-porcelain/70 text-sm hover:border-royal-azure/50 transition-colors"
+            >
+              Cerrar
+            </button>
+          ) : (
+            <>
+              {selected && (
+                <p className="text-xs text-porcelain/55 text-center mb-2">
+                  Seleccionado: <span className="text-porcelain font-medium">{fmtDay(selected.startTime)} — {fmtHour(selected.startTime)}</span>
+                </p>
+              )}
+              <button
+                disabled={busy || !selected}
+                onClick={() => void confirmar()}
+                className="w-full py-2.5 rounded-xl bg-royal-azure text-white text-sm font-semibold hover:bg-royal-azure/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {busy
+                  ? <><span className="animate-spin inline-block">⟳</span> Registrando en blockchain…</>
+                  : <><span>⛓</span> {selected ? "Confirmar Cita" : "Selecciona un horario"}</>
+                }
+              </button>
+              {realSlots && realSlots.length === 0 && (
+                <p className="text-[10px] text-porcelain/30 text-center mt-2">● horario confirmado en sistema · Sin ● es estimado</p>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -350,12 +563,14 @@ function PaymentScreen({
   derivedAddress,
   amountExpected,
   startedAt,
+  onChainTxHash,
   onDone,
 }: {
   appointmentId: Id<"appointments">;
   derivedAddress: string;
   amountExpected: string;
   startedAt: number;
+  onChainTxHash?: string;
   onDone: () => void;
 }) {
   const appt = useQuery(api.appointments.queries.getAppointmentById, {
@@ -403,13 +618,26 @@ function PaymentScreen({
               <div className="text-3xl font-mono text-soft-fawn">{mm}:{ss}</div>
               <div className="text-xs text-porcelain/40">tiempo restante del hold</div>
             </div>
-            <Field label="Monto" value={`${amountExpected} SYS`} />
+            <Field label="Monto" value={`S/. ${amountExpected}`} />
             <div className="mt-3">
               <dt className="text-porcelain/40 text-xs uppercase tracking-wide">Dirección de pago</dt>
               <dd className="text-porcelain/90 mt-0.5 font-mono text-xs break-all bg-slate rounded-lg px-2 py-2 border border-mist">
                 {derivedAddress}
               </dd>
             </div>
+            {onChainTxHash && (
+              <div className="mt-4 pt-4 border-t border-mist/40">
+                <dt className="text-porcelain/40 text-xs uppercase tracking-wide mb-1">Registro blockchain</dt>
+                <a
+                  href={explorerTx(onChainTxHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-mono text-royal-azure hover:underline break-all"
+                >
+                  {onChainTxHash.slice(0, 20)}…{onChainTxHash.slice(-8)} ↗
+                </a>
+              </div>
+            )}
             <p className="text-xs text-porcelain/50 mt-4">
               {status === "pending"
                 ? "Esperando el pago on-chain… esta pantalla se actualiza sola."
@@ -470,10 +698,22 @@ function AppointmentsHistory() {
             <StatusPill status={a.status} />
           </div>
           <div className="mt-2 flex items-center justify-between text-xs text-porcelain/60">
-            <span>
-              {a.amountPaidSYS ? `${a.amountPaidSYS} SYS` : "—"}
-              {a.txHashTruncated ? ` · tx ${a.txHashTruncated}` : ""}
-            </span>
+            <div className="flex flex-col gap-1">
+              <span>
+                {a.amountPaidSYS ? `S/. ${a.amountPaidSYS}` : "—"}
+                {a.txHashTruncated ? ` · tx ${a.txHashTruncated}` : ""}
+              </span>
+              {a.onChainTxHash && (
+                <a
+                  href={explorerTx(a.onChainTxHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-royal-azure hover:underline flex items-center gap-1"
+                >
+                  <span>⛓</span> Ver en blockchain ↗
+                </a>
+              )}
+            </div>
             {a.status === "confirmed" && (
               <button
                 disabled={busyId === a._id}

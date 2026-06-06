@@ -10,7 +10,7 @@ export interface TemplateParams {
 const TEMPLATES: Record<string, (p: TemplateParams) => string> = {
   CHECKIN_INVITATION: (p) => {
     const name = p.patientName ? ` ${p.patientName}` : "";
-    return `Hola${name}, soy Hermes, tu asistente de salud. ¿Cómo te sientes hoy? Responde desde tu portal en Sephiem para contarme cómo estás.`;
+    return `Hola${name}, soy SEPH-AI, tu asistente de salud. ¿Cómo te sientes hoy? Responde desde tu portal en Sephiem para contarme cómo estás.`;
   },
 
   NEW_DOCTOR_MESSAGE: (p) => {
@@ -39,7 +39,7 @@ const TEMPLATES: Record<string, (p: TemplateParams) => string> = {
 
   MEDICAL_ALERT_URGENT: (p) => {
     const name = p.patientName ? `, ${p.patientName}` : "";
-    return `⚠️ Alerta médica importante${name}. Hermes detectó algo que requiere atención. Revisa tu portal médico de inmediato o contacta a tu médico.`;
+    return `⚠️ Alerta médica importante${name}. SEPH-AI detectó algo que requiere atención. Revisa tu portal médico de inmediato o contacta a tu médico.`;
   },
 };
 
@@ -50,12 +50,12 @@ export function buildMessage(templateCode: string, params: TemplateParams): stri
 }
 
 const DESCRIPTIONS: Record<string, string> = {
-  CHECKIN_INVITATION: "Invitación a checkin diario con Hermes",
+  CHECKIN_INVITATION: "Invitación a checkin diario con SEPH-AI",
   NEW_DOCTOR_MESSAGE: "Notificación de nuevo mensaje del médico",
   APPOINTMENT_REMINDER: "Recordatorio de cita médica",
   HEALTH_PLAN_REMINDER: "Recordatorio de plan de salud",
   SUBSCRIPTION_RENEWAL: "Aviso de renovación de suscripción",
-  MEDICAL_ALERT_URGENT: "Alerta médica urgente de Hermes",
+  MEDICAL_ALERT_URGENT: "Alerta médica urgente de SEPH-AI",
 };
 
 export function getTemplateDescription(code: string): string {

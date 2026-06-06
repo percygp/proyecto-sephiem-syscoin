@@ -271,10 +271,12 @@ export default defineSchema({
     phone: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     isActive: v.boolean(),
+    discordId: v.optional(v.string()),
   })
     .index("by_tokenIdentifier", ["tokenIdentifier"])
     .index("by_walletAddress", ["walletAddress"])
-    .index("by_role", ["role"]),
+    .index("by_role", ["role"])
+    .index("by_discordId", ["discordId"]),
 
   // ── 2. patients ────────────────────────────────────────────────────────────
   // Datos clínicos y de suscripción.
@@ -744,6 +746,8 @@ export default defineSchema({
     invoiceId: v.optional(v.id("paymentInvoices")),
     amountPaidSYS: v.optional(v.string()),
     txHash: v.optional(v.string()),
+    onChainTxHash: v.optional(v.string()),       // tx de AppointmentRegistry.bookAppointment
+    onChainAppointmentId: v.optional(v.string()), // bytes32 del evento AppointmentBooked
     createdAt: v.number(),
   })
     .index("by_specialistId", ["specialistId"])

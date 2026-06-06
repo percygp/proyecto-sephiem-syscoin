@@ -13,11 +13,13 @@
  * refactoriza para integrarse con el flujo de registro completo.
  */
 import { v } from "convex/values";
-import { internalMutation, query } from "../_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { getCallerProfile } from "../lib/rbac";
 import { findExistingOrNull } from "../lib/unique";
+import { internal } from "../_generated/api";
+import { isAddress } from "viem";
 
 /**
  * Query pública: obtiene el profile del usuario actual (si existe).
@@ -41,6 +43,7 @@ export const getMyProfile = query({
       email: v.string(),
       phone: v.optional(v.string()),
       avatarUrl: v.optional(v.string()),
+      discordId: v.optional(v.string()),
       isActive: v.boolean(),
     }),
   ),
@@ -48,6 +51,56 @@ export const getMyProfile = query({
     // Usa helper RBAC silencioso: retorna null si no hay sesión o profile.
     // Esta query la consume la UI para saber si mostrar onboarding/login.
     return await getCallerProfile(ctx);
+  },
+});
+
+/**
+ * Mutation pública: crea o actualiza el profile con la wallet address de Privy.
+ * Reemplaza el flujo de nonce/firma (A4) — Privy ya verificó la wallet al login.
+ */
+export const ensureMyProfile = mutation({
+  args: { walletAddress: v.string() },
+  returns: v.object({ profileId: v.id("profiles") }),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new ConvexError({ code: "UNAUTHENTICATED", message: "Privy JWT requerido" });
+    }
+    if (!isAddress(args.walletAddress)) {
+      throw new ConvexError({ code: "INVALID_ADDRESS", message: "walletAddress inválida" });
+    }
+
+    const existing = await findExistingOrNull(
+      ctx, "profiles", "by_tokenIdentifier",
+      (q) => q.eq("tokenIdentifier", identity.tokenIdentifier),
+    );
+
+    if (existing) {
+      if (existing.walletAddress !== args.walletAddress) {
+        await ctx.db.patch("profiles", existing._id, { walletAddress: args.walletAddress });
+      }
+      return { profileId: existing._id };
+    }
+
+    const profileId = await ctx.db.insert("profiles", {
+      tokenIdentifier: identity.tokenIdentifier,
+      walletAddress: args.walletAddress,
+      role: "patient",
+      name: identity.name ?? "",
+      email: identity.email ?? "",
+      isActive: true,
+    });
+
+    await ctx.runMutation(internal.audit.log, {
+      actorProfileId: profileId,
+      actorType: "patient",
+      action: "WALLET_VERIFIED",
+      targetId: profileId,
+      targetType: "profile",
+      channel: "web",
+    });
+
+    return { profileId };
   },
 });
 
@@ -105,6 +158,34 @@ export const ensureProfileForCurrentUser = internalMutation({
  * InternalQuery: obtiene profileId por tokenIdentifier o lanza si no existe.
  * Para uso de mutations/actions que asumen el profile ya existe.
  */
+/**
+ * Mutation pública: vincula un Discord ID al perfil del usuario autenticado.
+ * El paciente llama esto desde el portal, pasando su propio Discord user ID.
+ */
+export const linkDiscordAccount = mutation({
+  args: { discordId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { discordId }) => {
+    const profile = await getCallerProfile(ctx);
+    if (!profile) throw new ConvexError({ code: "NOT_AUTHENTICATED", message: "No autenticado" });
+
+    // Verificar que no esté vinculado a otra cuenta
+    const existing = await ctx.db
+      .query("profiles")
+      .withIndex("by_discordId", (q) => q.eq("discordId", discordId))
+      .unique();
+    if (existing && existing._id !== profile._id) {
+      throw new ConvexError({
+        code: "DISCORD_ALREADY_LINKED",
+        message: "Este Discord ID ya está vinculado a otra cuenta de SEPHIEM.",
+      });
+    }
+
+    await ctx.db.patch(profile._id, { discordId });
+    return null;
+  },
+});
+
 export const getProfileIdByToken = internalMutation({
   args: { tokenIdentifier: v.string() },
   returns: v.id("profiles"),

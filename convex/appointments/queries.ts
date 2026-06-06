@@ -58,6 +58,7 @@ const appointmentSummary = v.object({
   status: appointmentStatus,
   amountPaidSYS: v.optional(v.string()),
   txHashTruncated: v.optional(v.string()),
+  onChainTxHash: v.optional(v.string()),
 });
 
 async function toSummary(ctx: { db: any }, a: Doc<"appointments">) {
@@ -71,6 +72,7 @@ async function toSummary(ctx: { db: any }, a: Doc<"appointments">) {
     status: a.status,
     amountPaidSYS: a.amountPaidSYS,
     txHashTruncated: truncTx(a.txHash),
+    onChainTxHash: a.onChainTxHash,
   };
 }
 

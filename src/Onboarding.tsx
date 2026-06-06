@@ -18,27 +18,17 @@ const DOC_VERSION = "v1.0"; // version del texto de consentimiento
 const CONSENT_DEFINITIONS = [
   {
     key: "terms" as const,
-    title: "Términos y condiciones",
-    body: "Acepto los términos y condiciones de uso de Sephiem.",
-  },
-  {
-    key: "data_processing" as const,
-    title: "Procesamiento de datos",
-    body: "Autorizo el almacenamiento y procesamiento de mis datos clínicos en la plataforma Sephiem.",
-  },
-  {
-    key: "ai_interaction" as const,
-    title: "Interacción con IA (Hermes)",
-    body: "Acepto que Hermes (asistente IA) procese mis mensajes del portal web para darme acompañamiento. Hermes NO sustituye al médico humano.",
+    title: "Términos, datos y asistente IA",
+    body: "Acepto los términos de uso de Sephiem, el procesamiento de mis datos clínicos en la plataforma, y que SEPH-AI (asistente IA) me brinde acompañamiento. SEPH-AI no sustituye al médico.",
   },
   {
     key: "whatsapp_notifications" as const,
-    title: "Notificaciones por WhatsApp",
-    body: "Acepto recibir notificaciones de Sephiem por WhatsApp. Entiendo que estos mensajes pueden revelar que soy usuario de un servicio de salud.",
+    title: "Notificaciones por WhatsApp (opcional)",
+    body: "Acepto recibir notificaciones y mensajes de seguimiento por WhatsApp.",
   },
 ];
 
-export function Onboarding() {
+export function Onboarding({ onSkip }: { onSkip?: () => void }) {
   const { wallets } = useWallets();
   const wallet = wallets[0];
   const completeOnboarding = useMutation(
@@ -65,8 +55,6 @@ export function Onboarding() {
   const [consentsGranted, setConsentsGranted] = useState<Record<string, boolean>>(
     {
       terms: false,
-      data_processing: false,
-      ai_interaction: false,
       whatsapp_notifications: false,
     },
   );
@@ -95,11 +83,9 @@ export function Onboarding() {
 
   async function handleSubmit() {
     setError(null);
-    // Los 3 primeros son obligatorios. whatsapp_notifications es opcional.
+    // Solo terms es obligatorio. whatsapp_notifications es opcional.
     const mandatory: Array<keyof typeof consentsGranted> = [
       "terms",
-      "data_processing",
-      "ai_interaction",
     ];
     for (const key of mandatory) {
       if (!consentsGranted[key]) {
@@ -150,17 +136,16 @@ export function Onboarding() {
     <div className="min-h-screen bg-ink text-porcelain flex items-center justify-center p-6">
       <div className="w-full max-w-2xl">
         {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-royal-azure to-ship-cove flex items-center justify-center shadow-lg shadow-royal-azure/20">
-              <span className="text-porcelain font-bold">S</span>
-            </div>
-            <span className="font-bold text-xl tracking-wide">SEPHIEM</span>
-          </div>
+        <div className="mb-8 text-center relative">
+          {onSkip && (
+            <button
+              onClick={onSkip}
+              className="absolute left-0 top-0 flex items-center gap-1.5 text-sm text-porcelain/50 hover:text-porcelain transition-colors"
+            >
+              ← Volver
+            </button>
+          )}
           <h1 className="text-2xl font-bold">Completemos tu perfil</h1>
-          <p className="text-porcelain/60 text-sm mt-1">
-            Tomará menos de un minuto. Tus datos son tuyos.
-          </p>
         </div>
 
         {/* Indicador de paso */}
@@ -286,7 +271,7 @@ type FormStepProps = {
 function FormStep(p: FormStepProps) {
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="font-semibold mb-1">Datos personales</h2>
+
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Nombre completo *" value={p.name} onChange={p.setName} placeholder="María García" />
@@ -316,16 +301,6 @@ function FormStep(p: FormStepProps) {
         <Field label="Teléfono contacto (E.164)" value={p.emergencyPhone} onChange={p.setEmergencyPhone} placeholder="+584145555555" />
       </div>
 
-      {p.walletAddress && (
-        <div className="mt-2 p-3 border border-mist rounded bg-ink/50">
-          <div className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono mb-1">
-            Wallet asociada (verificada)
-          </div>
-          <div className="text-xs font-mono text-porcelain/80 truncate">
-            {p.walletAddress}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -367,8 +342,7 @@ function ConsentsStep({
       <div>
         <h2 className="font-semibold mb-1">Consentimientos</h2>
         <p className="text-xs text-porcelain/55 leading-relaxed">
-          Los 3 primeros son obligatorios. El cuarto (WhatsApp) es opcional —
-          puedes activarlo o desactivarlo en cualquier momento desde tu perfil.
+          El primero es obligatorio. El segundo es opcional.
         </p>
       </div>
 

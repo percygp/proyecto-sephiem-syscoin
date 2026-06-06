@@ -31,11 +31,11 @@ export const getMyDoctor = query({
         name: v.string(),
         email: v.string(),
         avatarUrl: v.optional(v.string()),
+        walletAddress: v.string(),
       }),
     }),
   ),
   handler: async (ctx) => {
-    // Silencioso: si no es doctor o no hay auth, retorna null
     const profile = await getCallerProfile(ctx);
     if (!profile || profile.role !== "doctor") return null;
 
@@ -57,6 +57,7 @@ export const getMyDoctor = query({
         name: profile.name,
         email: profile.email,
         avatarUrl: profile.avatarUrl,
+        walletAddress: profile.walletAddress,
       },
     };
   },
@@ -153,6 +154,7 @@ export const getPatientDetail = query({
         name: v.string(),
         email: v.string(),
         phone: v.optional(v.string()),
+        walletAddress: v.string(),
       }),
     }),
     consultations: v.array(
@@ -229,6 +231,7 @@ export const getPatientDetail = query({
           name: profile.name,
           email: profile.email,
           phone: profile.phone,
+          walletAddress: profile.walletAddress,
         },
       },
       consultations: consultations.map((c) => ({

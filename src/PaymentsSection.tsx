@@ -7,203 +7,366 @@
  * El paciente envía SYS/USDT a la derivedAddress. El monitor de blockchain
  * (VPS futuro) detecta el pago y actualiza el estado automáticamente.
  */
-import { useQuery } from "convex/react";
+import { useCallback, useEffect, useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { useWallets } from "@privy-io/react-auth";
 import { api } from "../convex/_generated/api";
+import { useSyscoin } from "./web3";
+import { isPatient, getRecordsByPaciente, verifyIntegrity } from "./web3/client";
+import { explorerTx } from "./web3/chain";
+import type { Address, Hex } from "viem";
 
 export function PaymentsSection() {
-  const invoices = useQuery(api.payments.invoices.getMyInvoices);
+  const { wallets } = useWallets();
+  const walletAddress = wallets[0]?.address;
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-3xl mx-auto">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold mb-1">Pagos y suscripción</h1>
+          <h1 className="text-xl font-semibold mb-1">Configuración</h1>
           <p className="text-sm text-porcelain/55">
-            Paga en Syscoin testnet para activar tu seguimiento médico.
+            Gestiona tu cuenta e integraciones.
           </p>
         </div>
 
-        {invoices === undefined && (
-          <p className="text-xs text-porcelain/40 text-center py-12">
-            Cargando facturas…
-          </p>
-        )}
+        <DiscordLinkCard />
 
-        {invoices && invoices.length === 0 && (
-          <div className="border border-mist rounded-lg p-8 text-center bg-graphite">
-            <div className="w-14 h-14 rounded-2xl bg-ink border border-mist flex items-center justify-center text-soft-fawn text-xl mx-auto mb-3">
-              💳
-            </div>
-            <p className="text-sm text-porcelain/70">
-              No tienes facturas pendientes.
-            </p>
-            <p className="text-[11px] text-porcelain/40 mt-1 font-mono">
-              El administrador genera tu factura de suscripción.
-            </p>
+        {walletAddress && (
+          <div className="mt-8">
+            <Web3IdentitySection walletAddress={walletAddress as Address} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Web3IdentitySection — identidad on-chain del paciente (zkSYS Testnet)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Web3IdentitySection({ walletAddress }: { walletAddress: Address }) {
+  const syscoin = useSyscoin();
+
+  const [registered, setRegistered] = useState<boolean | null>(null);
+  const [records, setRecords] = useState<readonly Hex[] | null>(null);
+  const [loadingIdentity, setLoadingIdentity] = useState(true);
+
+  const [grantInput, setGrantInput] = useState("");
+  const [revokeInput, setRevokeInput] = useState("");
+
+  const [txState, setTxState] = useState<{
+    action: string;
+    status: "pending" | "ok" | "err";
+    txHash?: Hex;
+    error?: string;
+  } | null>(null);
+
+  const [verifyResults, setVerifyResults] = useState<Record<string, boolean | null>>({});
+
+  // Load on-chain identity on mount and after txs
+  const loadIdentity = useCallback(async () => {
+    setLoadingIdentity(true);
+    try {
+      const [reg, recs] = await Promise.all([
+        isPatient(walletAddress) as Promise<boolean>,
+        getRecordsByPaciente(walletAddress) as Promise<readonly Hex[]>,
+      ]);
+      setRegistered(reg);
+      setRecords(recs);
+    } catch {
+      setRegistered(null);
+      setRecords(null);
+    } finally {
+      setLoadingIdentity(false);
+    }
+  }, [walletAddress]);
+
+  useEffect(() => { void loadIdentity(); }, [loadIdentity]);
+
+  async function doRegister() {
+    setTxState({ action: "Registrando paciente…", status: "pending" });
+    try {
+      const txHash = await syscoin.registerPatient();
+      setTxState({ action: "Registro completado", status: "ok", txHash });
+      await loadIdentity();
+    } catch (e) {
+      setTxState({ action: "registerPatient", status: "err", error: (e as Error).message });
+    }
+  }
+
+  async function doGrant() {
+    if (!grantInput.trim()) return;
+    setTxState({ action: "Concediendo acceso…", status: "pending" });
+    try {
+      const txHash = await syscoin.grantAccess(grantInput.trim() as Address);
+      setTxState({ action: "Acceso concedido", status: "ok", txHash });
+      setGrantInput("");
+    } catch (e) {
+      setTxState({ action: "grantAccess", status: "err", error: (e as Error).message });
+    }
+  }
+
+  async function doRevoke() {
+    if (!revokeInput.trim()) return;
+    setTxState({ action: "Revocando acceso…", status: "pending" });
+    try {
+      const txHash = await syscoin.revokeAccess(revokeInput.trim() as Address);
+      setTxState({ action: "Acceso revocado", status: "ok", txHash });
+      setRevokeInput("");
+    } catch (e) {
+      setTxState({ action: "revokeAccess", status: "err", error: (e as Error).message });
+    }
+  }
+
+  async function doVerify(recordId: Hex) {
+    setVerifyResults((p) => ({ ...p, [recordId]: null }));
+    try {
+      const ok = await verifyIntegrity(recordId, recordId) as boolean;
+      setVerifyResults((p) => ({ ...p, [recordId]: ok }));
+    } catch {
+      setVerifyResults((p) => ({ ...p, [recordId]: false }));
+    }
+  }
+
+  return (
+    <div className="border border-mist rounded-lg bg-graphite overflow-hidden">
+      <div className="px-4 py-3 border-b border-mist flex items-center gap-2">
+        <span className="text-sm font-semibold">Identidad Blockchain</span>
+        <span className="text-[10px] font-mono text-porcelain/45 bg-ink px-1.5 py-0.5 rounded">zkSYS Testnet</span>
+      </div>
+
+      <div className="p-4 flex flex-col gap-5">
+        {/* Estado de registro */}
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono mb-0.5">Estado on-chain</div>
+            {loadingIdentity ? (
+              <span className="text-xs text-porcelain/40 font-mono">Consultando…</span>
+            ) : registered === null ? (
+              <span className="text-xs text-soft-fawn font-mono">Error al leer contrato</span>
+            ) : registered ? (
+              <span className="text-xs text-success font-mono">✓ Registrado en PatientRegistry</span>
+            ) : (
+              <span className="text-xs text-porcelain/50 font-mono">No registrado on-chain</span>
+            )}
+          </div>
+          {!loadingIdentity && !registered && (
+            <button
+              onClick={() => void doRegister()}
+              disabled={txState?.status === "pending"}
+              className="bg-royal-azure hover:bg-royal-azure/80 disabled:opacity-50 text-porcelain text-xs px-3 py-1.5 rounded transition-colors"
+            >
+              Registrar wallet
+            </button>
+          )}
+        </div>
+
+        {/* Grant access */}
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono mb-1.5">
+            Conceder acceso a médico
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={grantInput}
+              onChange={(e) => setGrantInput(e.target.value)}
+              placeholder="0x... wallet del médico"
+              className="flex-1 bg-ink border border-mist rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-royal-azure/60"
+            />
+            <button
+              onClick={() => void doGrant()}
+              disabled={!grantInput.trim() || txState?.status === "pending"}
+              className="bg-royal-azure/20 border border-royal-azure/40 text-royal-azure text-xs px-3 py-1.5 rounded hover:bg-royal-azure/30 disabled:opacity-40 transition-colors shrink-0"
+            >
+              Conceder
+            </button>
+          </div>
+        </div>
+
+        {/* Revoke access */}
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono mb-1.5">
+            Revocar acceso a médico
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={revokeInput}
+              onChange={(e) => setRevokeInput(e.target.value)}
+              placeholder="0x... wallet del médico"
+              className="flex-1 bg-ink border border-mist rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-royal-azure/60"
+            />
+            <button
+              onClick={() => void doRevoke()}
+              disabled={!revokeInput.trim() || txState?.status === "pending"}
+              className="bg-soft-fawn/10 border border-soft-fawn/30 text-soft-fawn text-xs px-3 py-1.5 rounded hover:bg-soft-fawn/20 disabled:opacity-40 transition-colors shrink-0"
+            >
+              Revocar
+            </button>
+          </div>
+        </div>
+
+        {/* TX feedback */}
+        {txState && (
+          <div className={`text-xs font-mono p-2 rounded border ${
+            txState.status === "pending" ? "bg-royal-azure/10 border-royal-azure/30 text-royal-azure" :
+            txState.status === "ok" ? "bg-success/10 border-success/30 text-success" :
+            "bg-soft-fawn/10 border-soft-fawn/30 text-soft-fawn"
+          }`}>
+            {txState.status === "pending" && "⏳ "}
+            {txState.status === "ok" && "✓ "}
+            {txState.status === "err" && "✗ "}
+            {txState.action}
+            {txState.txHash && (
+              <a
+                href={explorerTx(txState.txHash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 underline"
+              >
+                Ver tx →
+              </a>
+            )}
+            {txState.error && <span className="block mt-0.5 text-[10px] break-all">{txState.error}</span>}
           </div>
         )}
 
-        <div className="flex flex-col gap-3">
-          {invoices?.map((inv) => (
-            <InvoiceCard key={inv._id} invoice={inv} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InvoiceCard({
-  invoice,
-}: {
-  invoice: {
-    _id: string;
-    invoiceCode: string;
-    derivedAddress: string;
-    amountExpected: string;
-    currency: string;
-    expectedChainId: number;
-    status: string;
-    expiresAt: number;
-    subscriptionMonths: number;
-  };
-}) {
-  // eslint-disable-next-line react-hooks/purity
-  const now = Date.now();
-  const expired = invoice.expiresAt < now;
-  const hoursLeft = Math.max(
-    0,
-    Math.round((invoice.expiresAt - now) / (60 * 60 * 1000)),
-  );
-
-  return (
-    <div className="border border-mist rounded-lg p-4 bg-graphite">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <span className="text-sm font-semibold font-mono">
-            {invoice.invoiceCode}
-          </span>
-          <p className="text-[11px] text-porcelain/50 mt-0.5">
-            {invoice.subscriptionMonths}{" "}
-            {invoice.subscriptionMonths === 1 ? "mes" : "meses"} de suscripción
-          </p>
-        </div>
-        <InvoiceStatusPill status={invoice.status} expired={expired} />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <Field label="Monto">
-          <span className="text-lg font-mono text-porcelain">
-            {invoice.amountExpected}
-          </span>{" "}
-          <span className="text-soft-fawn font-mono text-sm">
-            {invoice.currency}
-          </span>
-        </Field>
-        <Field label="Red">
-          <span className="text-xs font-mono text-porcelain/80">
-            Syscoin testnet ({invoice.expectedChainId})
-          </span>
-        </Field>
-      </div>
-
-      {invoice.status === "pending" && !expired && (
-        <>
-          <Field label="Enviar a esta dirección">
-            <div className="flex items-center gap-2 mt-1">
-              <code className="flex-1 bg-ink border border-mist rounded px-2 py-1.5 text-xs font-mono text-porcelain/90 break-all">
-                {invoice.derivedAddress}
-              </code>
-              <button
-                onClick={() =>
-                  void navigator.clipboard.writeText(invoice.derivedAddress)
-                }
-                className="bg-royal-azure/20 border border-royal-azure/40 text-royal-azure text-xs px-2 py-1.5 rounded hover:bg-royal-azure/30 transition-colors shrink-0"
-                title="Copiar"
-              >
-                Copiar
-              </button>
+        {/* Records on-chain */}
+        {records !== null && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono mb-1.5">
+              Registros anclados ({records.length})
             </div>
-          </Field>
-          <p className="text-[11px] text-soft-fawn mt-2 font-mono">
-            ⏳ Expira en {hoursLeft}h. Envía el monto exacto.
-          </p>
-        </>
-      )}
-
-      {invoice.status === "paid" && (
-        <p className="text-xs text-success">
-          ✓ Pago confirmado. Suscripción activada.
-        </p>
-      )}
-      {invoice.status === "overpaid" && (
-        <p className="text-xs text-success">
-          ✓ Pago confirmado (excedente). Suscripción activada.
-        </p>
-      )}
-      {invoice.status === "partial" && (
-        <p className="text-xs text-soft-fawn">
-          ⚠ Pago parcial recibido. Contacta soporte para resolver.
-        </p>
-      )}
-      {(invoice.status === "expired" || expired) &&
-        invoice.status === "pending" && (
-          <p className="text-xs text-porcelain/50">
-            Esta factura expiró. Solicita una nueva.
-          </p>
+            {records.length === 0 ? (
+              <p className="text-xs text-porcelain/40 font-mono">Sin registros anclados aún.</p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {records.map((recordId) => (
+                  <div key={recordId} className="flex items-center gap-2 bg-ink border border-mist rounded px-2 py-1.5">
+                    <code className="flex-1 text-[10px] font-mono text-porcelain/70 truncate">{recordId}</code>
+                    <button
+                      onClick={() => void doVerify(recordId)}
+                      className="text-[10px] font-mono text-royal-azure hover:underline shrink-0"
+                    >
+                      Verificar
+                    </button>
+                    {verifyResults[recordId] !== undefined && verifyResults[recordId] !== null && (
+                      <span className={`text-[10px] font-mono shrink-0 ${verifyResults[recordId] ? "text-success" : "text-soft-fawn"}`}>
+                        {verifyResults[recordId] ? "✓ íntegro" : "✗ alterado"}
+                      </span>
+                    )}
+                    {verifyResults[recordId] === null && (
+                      <span className="text-[10px] font-mono text-porcelain/40 shrink-0">…</span>
+                    )}
+                    <a
+                      href={explorerTx(recordId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-mono text-porcelain/40 hover:text-porcelain shrink-0"
+                    >
+                      Explorer →
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
+      </div>
     </div>
   );
 }
 
-function InvoiceStatusPill({
-  status,
-  expired,
-}: {
-  status: string;
-  expired: boolean;
-}) {
-  const effectiveStatus = expired && status === "pending" ? "expired" : status;
-  const styles: Record<string, string> = {
-    pending: "bg-soft-fawn/15 text-soft-fawn border-soft-fawn/30",
-    paid: "bg-success/15 text-success border-success/30",
-    overpaid: "bg-success/15 text-success border-success/30",
-    partial: "bg-soft-fawn/15 text-soft-fawn border-soft-fawn/30",
-    expired: "bg-mist text-porcelain/50 border-mist",
-    cancelled: "bg-mist text-porcelain/50 border-mist",
-  };
-  const labels: Record<string, string> = {
-    pending: "Pendiente",
-    paid: "Pagado",
-    overpaid: "Pagado (excedente)",
-    partial: "Parcial",
-    expired: "Expirado",
-    cancelled: "Cancelado",
-  };
-  return (
-    <span
-      className={`text-[10px] px-2 py-0.5 rounded font-mono border ${
-        styles[effectiveStatus] ?? "bg-mist text-porcelain/50 border-mist"
-      }`}
-    >
-      {labels[effectiveStatus] ?? effectiveStatus}
-    </span>
-  );
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// DiscordLinkCard — vincula el Discord ID del paciente a su perfil SEPHIEM
+// ─────────────────────────────────────────────────────────────────────────────
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+
+function DiscordLinkCard() {
+  const profile = useQuery(api.auth.profiles.getMyProfile, {});
+  const linkDiscord = useMutation(api.auth.profiles.linkDiscordAccount);
+  const [discordId, setDiscordId] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const isLinked = !!profile?.discordId;
+
+  async function handleLink(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const id = discordId.trim();
+    if (!id || !/^\d{17,20}$/.test(id)) {
+      setErrorMsg("El Discord ID debe ser un número de 17-20 dígitos. Usa !vincular en Discord para obtenerlo.");
+      setStatus("error");
+      return;
+    }
+    setStatus("loading");
+    setErrorMsg("");
+    try {
+      await linkDiscord({ discordId: id });
+      setStatus("ok");
+      setDiscordId("");
+    } catch (err) {
+      setErrorMsg((err as Error).message ?? "Error al vincular la cuenta.");
+      setStatus("error");
+    }
+  }
+
   return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono mb-0.5">
-        {label}
+    <div className="bg-graphite border border-mist rounded-xl p-5">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-2xl">🎮</span>
+        <div>
+          <h2 className="text-sm font-semibold">Discord</h2>
+          <p className="text-xs text-porcelain/55">
+            Vincula tu cuenta para usar el bot SEPHIEM en Discord
+          </p>
+        </div>
+        {isLinked && (
+          <span className="ml-auto text-[10px] font-mono bg-success/10 border border-success/30 text-success px-2 py-0.5 rounded">
+            ✓ Vinculado
+          </span>
+        )}
       </div>
-      {children}
+
+      {isLinked ? (
+        <div className="text-xs text-porcelain/60">
+          <span className="font-mono bg-ink border border-mist rounded px-2 py-1">
+            ID: {profile.discordId}
+          </span>
+        </div>
+      ) : (
+        <form onSubmit={(e) => void handleLink(e)} className="flex flex-col gap-3">
+          <div className="text-xs text-porcelain/60 bg-ink border border-mist/50 rounded-lg p-3">
+            <p className="font-medium text-porcelain/80 mb-1">¿Cómo obtener tu Discord ID?</p>
+            <p>Escribe <code className="bg-graphite px-1 rounded">!vincular</code> en el servidor de Discord. El bot te enviará tu ID por DM.</p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={discordId}
+              onChange={(e) => { setDiscordId(e.target.value); setStatus("idle"); }}
+              placeholder="Pega tu Discord ID aquí (ej: 717626543475654687)"
+              className="flex-1 bg-ink border border-mist rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-royal-azure/60 placeholder:text-porcelain/30"
+            />
+            <button
+              type="submit"
+              disabled={status === "loading" || !discordId.trim()}
+              className="bg-royal-azure hover:bg-royal-azure/90 disabled:opacity-40 text-porcelain text-xs font-medium px-4 py-2 rounded-lg transition-colors shrink-0"
+            >
+              {status === "loading" ? "Vinculando…" : "Vincular"}
+            </button>
+          </div>
+          {status === "ok" && (
+            <p className="text-xs text-success">✓ Cuenta de Discord vinculada correctamente.</p>
+          )}
+          {status === "error" && (
+            <p className="text-xs text-soft-fawn">✗ {errorMsg}</p>
+          )}
+        </form>
+      )}
     </div>
   );
 }

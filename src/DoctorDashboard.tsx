@@ -10,13 +10,21 @@
  *
  * Paleta Sephiem. Datos reales del backend.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
-import { ChatPanel } from "./ChatPanel";
 import { NotificationsBell } from "./NotificationsBell";
+import {
+  useSyscoin,
+  hasAccess,
+  RECORD_TYPE,
+  RECORD_TYPE_LABELS,
+  explorerTx,
+  type AnchorRecordResult,
+} from "./web3";
+import type { Address } from "viem";
 
 export function DoctorDashboard() {
   const { logout } = usePrivy();
@@ -335,21 +343,14 @@ function PatientDetailPanel({
 function PatientDetail({ patientId }: { patientId: Id<"patients"> }) {
   const detail = useQuery(api.doctors.queries.getPatientDetail, { patientId });
   const myDoctor = useQuery(api.doctors.queries.getMyDoctor);
-  const allConversations = useQuery(
-    api.messages.conversations.listMyConversations,
-  );
   const logAccess = useMutation(
     api.doctors.auditAccess.logPatientRecordAccess,
   );
-  const [tab, setTab] = useState<"expediente" | "chat">("expediente");
 
   // A12: registrar audit PATIENT_RECORD_READ_FULL al abrir expediente.
-  // Cada cambio de paciente o cada vez que el tab vuelve a "expediente"
-  // dispara un nuevo audit. Decisión deliberada: medir lecturas reales.
   useEffect(() => {
-    if (tab !== "expediente") return;
     void logAccess({ patientId });
-  }, [patientId, tab, logAccess]);
+  }, [patientId, logAccess]);
 
   if (detail === undefined) {
     return (
@@ -358,11 +359,6 @@ function PatientDetail({ patientId }: { patientId: Id<"patients"> }) {
       </main>
     );
   }
-
-  // Resolver conversación doctor_patient con este paciente
-  const conversation = allConversations?.find(
-    (c) => c.patientId === patientId && c.type === "doctor_patient",
-  );
 
   return (
     <main className="flex-1 flex flex-col overflow-hidden bg-ink">
@@ -395,44 +391,9 @@ function PatientDetail({ patientId }: { patientId: Id<"patients"> }) {
           </p>
         )}
 
-        {/* Tabs Expediente / Chat */}
-        <div className="flex gap-1 mt-3">
-          <SubTab
-            label="Expediente"
-            icon="📋"
-            active={tab === "expediente"}
-            onClick={() => setTab("expediente")}
-          />
-          <SubTab
-            label="Chat"
-            icon="💬"
-            active={tab === "chat"}
-            onClick={() => setTab("chat")}
-          />
-        </div>
       </div>
 
-      {tab === "chat" ? (
-        <div className="flex-1 overflow-hidden">
-          {conversation && myDoctor ? (
-            <ChatPanel
-              conversationId={conversation._id}
-              title={`Chat con ${detail.patient.profile.name}`}
-              subtitle="Hilo doctor-paciente · cifrado"
-              avatarChar="P"
-              myProfileId={myDoctor.profileId}
-            />
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-center px-6">
-              <p className="text-xs text-porcelain/45 max-w-sm">
-                El paciente aún no ha abierto el hilo de chat contigo. Aparecerá
-                aquí cuando lo haga desde su portal.
-              </p>
-            </div>
-          )}
-        </div>
-      ) : (
-      /* Expediente: 2 columnas */
+      {/* Expediente: 2 columnas */}
       <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Consultas */}
         <Section title="Consultas">
@@ -520,39 +481,162 @@ function PatientDetail({ patientId }: { patientId: Id<"patients"> }) {
             </div>
           )}
         </Section>
+
+        {/* Blockchain: anclar registros on-chain */}
+        <div className="lg:col-span-2">
+          <AnchorRecordSection
+            patientWallet={detail.patient.profile.walletAddress as Address}
+            doctorWallet={myDoctor?.profile.walletAddress as Address | undefined}
+          />
+        </div>
       </div>
-      )}
     </main>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SubTab — tabs internas dentro del PatientDetail
+// AnchorRecordSection — anclar y verificar registros on-chain (médico)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SubTab({
-  label,
-  icon,
-  active,
-  onClick,
+function AnchorRecordSection({
+  patientWallet,
+  doctorWallet,
 }: {
-  label: string;
-  icon: string;
-  active: boolean;
-  onClick: () => void;
+  patientWallet: Address;
+  doctorWallet: Address | undefined;
 }) {
+  const syscoin = useSyscoin();
+  const [accessGranted, setAccessGranted] = useState<boolean | null>(null);
+  const [loadingAccess, setLoadingAccess] = useState(true);
+
+  const [tipo, setTipo] = useState<keyof typeof RECORD_TYPE>("RECOMENDACION");
+  const [contenido, setContenido] = useState("");
+  const [anchoring, setAnchoring] = useState(false);
+  const [result, setResult] = useState<AnchorRecordResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const checkAccess = useCallback(async () => {
+    if (!doctorWallet) return;
+    setLoadingAccess(true);
+    try {
+      const ok = await hasAccess(patientWallet, doctorWallet) as boolean;
+      setAccessGranted(ok);
+    } catch {
+      setAccessGranted(null);
+    } finally {
+      setLoadingAccess(false);
+    }
+  }, [patientWallet, doctorWallet]);
+
+  useEffect(() => { void checkAccess(); }, [checkAccess]);
+
+  async function doAnchor() {
+    if (!contenido.trim()) return;
+    setAnchoring(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await syscoin.anchorRecord({
+        paciente: patientWallet,
+        tipo: RECORD_TYPE[tipo],
+        contenido: contenido.trim(),
+      });
+      setResult(res);
+      setContenido("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAnchoring(false);
+    }
+  }
+
   return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs transition-colors ${
-        active
-          ? "bg-royal-azure/15 text-porcelain border border-royal-azure/40"
-          : "text-porcelain/55 hover:text-porcelain hover:bg-slate/50 border border-transparent"
-      }`}
-    >
-      <span>{icon}</span>
-      <span>{label}</span>
-    </button>
+    <div className="border border-mist rounded-lg bg-graphite overflow-hidden">
+      <div className="px-4 py-3 border-b border-mist flex items-center gap-2">
+        <span className="text-sm font-semibold">Registro Blockchain</span>
+        <span className="text-[10px] font-mono text-porcelain/45 bg-ink px-1.5 py-0.5 rounded">
+          zkSYS Testnet · MedicalRecordRegistry
+        </span>
+        <button
+          onClick={() => void checkAccess()}
+          className="ml-auto text-[10px] font-mono text-porcelain/45 hover:text-porcelain"
+        >
+          ↻ Actualizar acceso
+        </button>
+      </div>
+
+      <div className="p-4 flex flex-col gap-4">
+        {/* Acceso on-chain */}
+        <div className="flex items-center gap-3">
+          <div className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono">
+            Acceso on-chain:
+          </div>
+          {loadingAccess || !doctorWallet ? (
+            <span className="text-xs text-porcelain/40 font-mono">Consultando…</span>
+          ) : accessGranted === null ? (
+            <span className="text-xs text-soft-fawn font-mono">Error al leer contrato</span>
+          ) : accessGranted ? (
+            <span className="text-xs text-success font-mono">✓ Acceso concedido por paciente</span>
+          ) : (
+            <span className="text-xs text-soft-fawn font-mono">✗ Sin acceso — paciente debe concederlo</span>
+          )}
+        </div>
+
+        {/* Form anclar */}
+        <div className="flex flex-col gap-2">
+          <div className="text-[10px] uppercase tracking-wider text-porcelain/45 font-mono mb-0.5">
+            Anclar nuevo registro clínico
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value as keyof typeof RECORD_TYPE)}
+              className="bg-ink border border-mist rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-royal-azure/60"
+            >
+              {(Object.entries(RECORD_TYPE) as [keyof typeof RECORD_TYPE, number][]).map(([key, val]) => (
+                <option key={key} value={key}>{RECORD_TYPE_LABELS[val] ?? key}</option>
+              ))}
+            </select>
+          </div>
+          <textarea
+            value={contenido}
+            onChange={(e) => setContenido(e.target.value)}
+            placeholder="Resumen clínico a anclar (hash en cadena, contenido privado)"
+            rows={3}
+            className="bg-ink border border-mist rounded px-3 py-2 text-xs font-mono resize-none focus:outline-none focus:border-royal-azure/60"
+          />
+          <button
+            onClick={() => void doAnchor()}
+            disabled={!contenido.trim() || anchoring}
+            className="self-start bg-royal-azure hover:bg-royal-azure/80 disabled:opacity-40 text-porcelain text-xs px-4 py-1.5 rounded transition-colors font-medium"
+          >
+            {anchoring ? "Anclando…" : "Anclar on-chain"}
+          </button>
+        </div>
+
+        {/* Resultado */}
+        {result && (
+          <div className="bg-success/10 border border-success/30 rounded p-3 flex flex-col gap-1">
+            <span className="text-xs text-success font-mono">✓ Registro anclado</span>
+            <code className="text-[10px] font-mono text-porcelain/70 break-all">recordId: {result.recordId}</code>
+            <code className="text-[10px] font-mono text-porcelain/70 break-all">hash: {result.hash}</code>
+            <a
+              href={explorerTx(result.txHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] font-mono text-royal-azure underline"
+            >
+              Ver tx en Explorer →
+            </a>
+          </div>
+        )}
+        {error && (
+          <div className="bg-soft-fawn/10 border border-soft-fawn/30 rounded p-3">
+            <span className="text-xs text-soft-fawn font-mono break-all">✗ {error}</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

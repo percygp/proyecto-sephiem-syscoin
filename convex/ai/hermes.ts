@@ -114,7 +114,7 @@ export const processMessage = internalAction({
     if (!apiKey) {
       await ctx.runMutation(internal.ai.hermes._sendHermesMessage, {
         conversationId: args.conversationId,
-        content: "⚠️ Hermes no está disponible en este momento. Tu mensaje ha sido registrado y será revisado cuando el servicio se reactive.",
+        content: "⚠️ SEPH-AI no está disponible en este momento. Tu mensaje ha sido registrado y será revisado cuando el servicio se reactive.",
       });
       return;
     }

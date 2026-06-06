@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "convex dev --start 'vite --open'",
+    "dev": "convex dev --start \"vite\"",
     "predev": "convex init && node setup.mjs --once",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b && tsc -p convex/tsconfig.json --noEmit",
@@ -12,7 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@privy-io/react-auth": "^3.28.0",
+    "@privy-io/react-auth": "^3.6.1",
     "@scure/bip32": "^2.2.0",
     "@scure/bip39": "^2.2.0",
     "bip32": "^5.0.1",
@@ -28,12 +28,12 @@
     "@solana-program/system": "^0.12.2",
     "@solana-program/token": "^0.13.0",
     "@solana/kit": "^6.9.0",
-    "@solana/web3.js": "^1.98.4",
+    "@solana/web3.js": "^0.0.3",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
     "dotenv": "^17.4.2",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -43,6 +43,6 @@
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.9"
+    "vite": "^5.4.19"
   }
 }

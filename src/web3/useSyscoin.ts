@@ -10,6 +10,10 @@ import {
   type Hex,
   type WalletClient,
 } from "viem";
+export interface BookAppointmentResult {
+  appointmentId: Hex; // bytes32 del evento AppointmentBooked
+  txHash: Hex;
+}
 import { zkTanenbaum } from "./chain";
 import { CONTRACTS, RECORD_TYPE, type RecordType } from "./contracts";
 import { publicClient } from "./client";
@@ -75,6 +79,91 @@ export function useSyscoinNetwork(address?: string): SyscoinNetwork {
     online,
     loading,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useNextOnChainAppointment — lee la próxima cita del paciente desde el contrato.
+// Solo lectura via publicClient; no requiere wallet firmante.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface OnChainAppointment {
+  appointmentId: string;
+  medico: string;
+  fechaTimestamp: number; // ms
+  estado: number;         // 0=Booked 1=Confirmed 2=Completed 3=Cancelled
+}
+
+const APPOINTMENT_STATUS_LABEL: Record<number, string> = {
+  0: "Pendiente",
+  1: "Confirmada",
+  2: "Completada",
+  3: "Cancelada",
+};
+
+export { APPOINTMENT_STATUS_LABEL };
+
+export function useNextOnChainAppointment(address?: string): {
+  appointment: OnChainAppointment | null;
+  loading: boolean;
+} {
+  const [appointment, setAppointment] = useState<OnChainAppointment | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      try {
+        const ids = (await publicClient.readContract({
+          ...CONTRACTS.AppointmentRegistry,
+          functionName: "getAppointmentsByPaciente",
+          args: [getAddress(address!)],
+        })) as `0x${string}`[];
+
+        if (cancelled || ids.length === 0) { setAppointment(null); return; }
+
+        const details = await Promise.all(
+          ids.map((id) =>
+            publicClient.readContract({
+              ...CONTRACTS.AppointmentRegistry,
+              functionName: "getAppointment",
+              args: [id],
+            }),
+          ),
+        ) as Array<{ appointmentId: `0x${string}`; medico: string; fechaTimestamp: bigint; estado: number }>;
+
+        const now = Date.now();
+        const upcoming = details
+          .filter((d) => Number(d.fechaTimestamp) > now && d.estado !== 2 && d.estado !== 3)
+          .sort((a, b) => Number(a.fechaTimestamp) - Number(b.fechaTimestamp));
+
+        if (!cancelled) {
+          setAppointment(
+            upcoming[0]
+              ? {
+                  appointmentId: upcoming[0].appointmentId,
+                  medico: upcoming[0].medico,
+                  fechaTimestamp: Number(upcoming[0].fechaTimestamp),
+                  estado: upcoming[0].estado,
+                }
+              : null,
+          );
+        }
+      } catch {
+        if (!cancelled) setAppointment(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void load();
+    const id = setInterval(() => void load(), 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [address]);
+
+  return { appointment, loading };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -222,6 +311,64 @@ export function useSyscoin() {
     [getWalletClient],
   );
 
+  // Paciente reserva una cita en AppointmentRegistry on-chain.
+  // Registra al paciente en PatientRegistry si aún no lo está (transparente para el usuario).
+  // Retorna appointmentId (bytes32 del evento) + txHash.
+  const bookAppointmentOnChain = useCallback(
+    async (medicoAddress: Address, fechaTimestamp: number): Promise<BookAppointmentResult> => {
+      const { client, account } = await getWalletClient();
+
+      // Auto-registro en PatientRegistry si no está registrado
+      const alreadyRegistered = await publicClient.readContract({
+        ...CONTRACTS.PatientRegistry,
+        functionName: "isPatient",
+        args: [account],
+      }) as boolean;
+
+      if (!alreadyRegistered) {
+        const regTx = await client.writeContract({
+          ...CONTRACTS.PatientRegistry,
+          functionName: "registerPatient",
+          account,
+          chain: zkTanenbaum,
+        });
+        await publicClient.waitForTransactionReceipt({ hash: regTx });
+      }
+
+      const txHash = await client.writeContract({
+        ...CONTRACTS.AppointmentRegistry,
+        functionName: "bookAppointment",
+        args: [getAddress(medicoAddress), BigInt(fechaTimestamp)],
+        account,
+        chain: zkTanenbaum,
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+      if (receipt.status === "reverted") {
+        throw new Error("La transacción fue revertida por el contrato. Verifica que estés registrado como paciente en la plataforma.");
+      }
+
+      let appointmentId: Hex = txHash;
+      for (const log of receipt.logs) {
+        try {
+          const decoded = decodeEventLog({
+            abi: CONTRACTS.AppointmentRegistry.abi,
+            data: log.data,
+            topics: log.topics,
+          });
+          if (decoded.eventName === "AppointmentBooked") {
+            appointmentId = (decoded.args as { appointmentId: Hex }).appointmentId;
+            break;
+          }
+        } catch {
+          // log de otro contrato — ignorar
+        }
+      }
+      return { appointmentId, txHash };
+    },
+    [getWalletClient],
+  );
+
   return useMemo(
     () => ({
       address,
@@ -231,7 +378,8 @@ export function useSyscoin() {
       grantAccess,
       revokeAccess,
       anchorRecord,
+      bookAppointmentOnChain,
     }),
-    [address, wallet, registerPatient, grantAccess, revokeAccess, anchorRecord],
+    [address, wallet, registerPatient, grantAccess, revokeAccess, anchorRecord, bookAppointmentOnChain],
   );
 }

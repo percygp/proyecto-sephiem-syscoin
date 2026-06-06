@@ -240,7 +240,7 @@ export const listMyConversations = query({
     // Enriquecer con nombre del counterpart
     const result = [];
     for (const c of conversations) {
-      let counterpartName = "Hermes";
+      let counterpartName = "SEPH-AI";
       if (c.type === "doctor_patient" && c.doctorId) {
         if (profile.role === "patient") {
           // Counterpart = doctor

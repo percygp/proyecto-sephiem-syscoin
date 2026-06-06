@@ -67,8 +67,8 @@ export function resolveNotificationText(
       };
     case "hermes_alert":
       return {
-        title: "Alerta de Hermes",
-        body: "Hermes detectó algo importante. Revisa tu portal médico.",
+        title: "Alerta de SEPH-AI",
+        body: "SEPH-AI detectó algo importante. Revisa tu portal médico.",
       };
     case "medication_reminder":
       return {

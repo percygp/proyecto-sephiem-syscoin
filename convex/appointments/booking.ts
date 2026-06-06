@@ -506,3 +506,33 @@ export const completeAppointment = mutation({
     return { appointmentId: appointment._id, payoutId };
   },
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// saveOnChainData — paciente persiste el txHash y appointmentId del contrato
+// AppointmentRegistry tras firmar bookAppointment en su wallet.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const saveOnChainData = mutation({
+  args: {
+    appointmentId: v.id("appointments"),
+    onChainTxHash: v.string(),
+    onChainAppointmentId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const profile = await requireAuth(ctx);
+    const appt = await ctx.db.get("appointments", args.appointmentId);
+    if (!appt) throw new ConvexError({ code: "NOT_FOUND", message: "Cita no encontrada" });
+
+    const patient = await ctx.db.get("patients", appt.patientId);
+    if (!patient || patient.profileId !== profile._id) {
+      throw new ConvexError({ code: "FORBIDDEN", message: "No autorizado" });
+    }
+
+    await ctx.db.patch("appointments", args.appointmentId, {
+      onChainTxHash: args.onChainTxHash,
+      onChainAppointmentId: args.onChainAppointmentId,
+    });
+    return null;
+  },
+});

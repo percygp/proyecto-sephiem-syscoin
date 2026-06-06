@@ -16,7 +16,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { paginationOptsValidator } from "convex/server";
-import { requireAuth, requireAdmin } from "../lib/rbac";
+import { requireAuth, requireAdmin, getCallerProfile } from "../lib/rbac";
 import { requireFeatureFlag } from "../lib/featureFlags";
 import { assertStringLength, assertEvmAddress } from "../lib/validation";
 import { assertUnique } from "../lib/unique";
@@ -161,6 +161,24 @@ export const getSpecialistPayoutWallet = mutation({
       targetId: specialist._id,
       channel: "web",
     });
+
+    return { walletAddress: specialist.walletAddress };
+  },
+});
+
+/**
+ * getSpecialistWalletForBooking — devuelve walletAddress al paciente autenticado
+ * ÚNICAMENTE para firmar bookAppointment en AppointmentRegistry. No mostrar en UI.
+ */
+export const getSpecialistWalletForBooking = query({
+  args: { specialistId: v.id("marketplaceSpecialists") },
+  returns: v.union(v.object({ walletAddress: v.string() }), v.null()),
+  handler: async (ctx, args) => {
+    const caller = await getCallerProfile(ctx);
+    if (!caller || caller.role !== "patient") return null;
+
+    const specialist = await ctx.db.get("marketplaceSpecialists", args.specialistId);
+    if (!specialist || !specialist.isVerifiedByAdmin) return null;
 
     return { walletAddress: specialist.walletAddress };
   },
