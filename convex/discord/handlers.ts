@@ -76,6 +76,111 @@ export const _getHermesContext = internalQuery({
   },
 });
 
+/**
+ * Construye el contexto clínico del paciente para pasar a SEPH-AI.
+ * Incluye datos básicos, consultas recientes, tratamientos y medicamentos activos.
+ */
+export const _getPatientClinicalContext = internalQuery({
+  args: { patientId: v.id("patients") },
+  returns: v.object({
+    contextSummary: v.string(),
+    promptVersion: v.optional(v.string()),
+  }),
+  handler: async (ctx, { patientId }) => {
+    const patient = await ctx.db.get(patientId);
+    if (!patient) return { contextSummary: "", promptVersion: undefined };
+
+    const profile = await ctx.db.get(patient.profileId);
+
+    // Últimas 3 consultas completadas o recientes
+    const consultations = await ctx.db
+      .query("consultations")
+      .withIndex("by_patientId", (q) => q.eq("patientId", patientId))
+      .order("desc")
+      .take(3);
+
+    // Tratamientos activos
+    const treatments = await ctx.db
+      .query("treatments")
+      .withIndex("by_patientId_and_status", (q) =>
+        q.eq("patientId", patientId).eq("status", "active"),
+      )
+      .take(5);
+
+    // Medicamentos activos
+    const medications = await ctx.db
+      .query("medications")
+      .withIndex("by_patientId_and_isActive", (q) =>
+        q.eq("patientId", patientId).eq("isActive", true),
+      )
+      .take(10);
+
+    // Estado Hermes previo
+    const hermesState = await ctx.db
+      .query("hermesState")
+      .withIndex("by_patientId", (q) => q.eq("patientId", patientId))
+      .unique();
+
+    const lines: string[] = ["--- CONTEXTO CLÍNICO DEL PACIENTE ---"];
+
+    lines.push(`Nombre: ${profile?.name ?? "desconocido"}`);
+    lines.push(`Fecha de nacimiento: ${patient.dateOfBirth}`);
+    if (patient.bloodType) lines.push(`Tipo de sangre: ${patient.bloodType}`);
+    if (patient.allergies && patient.allergies.length > 0) {
+      lines.push(`Alergias: ${patient.allergies.join(", ")}`);
+    } else {
+      lines.push("Alergias: ninguna registrada");
+    }
+    if (patient.emergencyContactName) {
+      lines.push(`Contacto de emergencia: ${patient.emergencyContactName}`);
+    }
+    lines.push(`Suscripción: ${patient.subscriptionStatus}`);
+
+    if (consultations.length > 0) {
+      lines.push("\nConsultas recientes:");
+      for (const c of consultations) {
+        const fecha = new Date(c.scheduledAt).toLocaleDateString("es");
+        const resumen = c.summary ? ` — ${c.summary.slice(0, 120)}` : "";
+        lines.push(`  • ${fecha} (${c.status})${resumen}`);
+      }
+    }
+
+    if (treatments.length > 0) {
+      lines.push("\nTratamientos activos:");
+      for (const t of treatments) {
+        const desc = t.description ? `: ${t.description.slice(0, 120)}` : "";
+        lines.push(`  • ${t.diagnosis}${desc}`);
+      }
+    }
+
+    if (medications.length > 0) {
+      lines.push("\nMedicamentos activos:");
+      for (const m of medications) {
+        lines.push(`  • ${m.name} — ${m.dosage}, ${m.frequency}`);
+      }
+    }
+
+    if (hermesState) {
+      if (hermesState.lastReportedMood) {
+        lines.push(`\nEstado de ánimo previo: ${hermesState.lastReportedMood}`);
+      }
+      if (hermesState.alertLevel !== "normal") {
+        lines.push(`Nivel de alerta Hermes: ${hermesState.alertLevel}`);
+      }
+      if (hermesState.contextSummary) {
+        lines.push(`\nResumen sesión anterior: ${hermesState.contextSummary.slice(0, 300)}`);
+      }
+    }
+
+    lines.push("--- FIN CONTEXTO ---");
+
+    return {
+      contextSummary: lines.join("\n").slice(0, 3000),
+      promptVersion: hermesState?.promptVersion,
+    };
+  },
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Mutations internas
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,7 +199,7 @@ export const _updateCheckin = internalMutation({
       .unique();
 
     if (existing) {
-      await ctx.db.patch("hermesState", existing._id, {
+      await ctx.db.patch(existing._id, {
         lastCheckinAt: now,
         lastReportedMood: mood ?? existing.lastReportedMood,
         updatedAt: now,
@@ -118,6 +223,49 @@ export const _updateCheckin = internalMutation({
   },
 });
 
+/**
+ * Guarda el historial de conversación Discord del paciente en hermesState.
+ * Mantiene los últimos 10 turnos (20 mensajes).
+ */
+export const _saveDiscordHistory = internalMutation({
+  args: {
+    patientId: v.id("patients"),
+    userMessage: v.string(),
+    assistantReply: v.string(),
+  },
+  handler: async (ctx, { patientId, userMessage, assistantReply }) => {
+    const existing = await ctx.db
+      .query("hermesState")
+      .withIndex("by_patientId", (q) => q.eq("patientId", patientId))
+      .unique();
+
+    const newTurns = [
+      { role: "user" as const,      content: userMessage.slice(0, 500) },
+      { role: "assistant" as const, content: assistantReply.slice(0, 500) },
+    ];
+
+    if (existing) {
+      const prev = existing.discordHistory ?? [];
+      const updated = [...prev, ...newTurns].slice(-20); // últimos 10 turnos
+      await ctx.db.patch(existing._id, {
+        discordHistory: updated,
+        totalInteractions: existing.totalInteractions + 1,
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("hermesState", {
+        patientId,
+        contextSummary: "",
+        alertLevel: "normal",
+        promptVersion: LATEST_VERSION,
+        totalInteractions: 1,
+        updatedAt: Date.now(),
+        discordHistory: newTurns,
+      });
+    }
+  },
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Action: llamar OpenAI con el prompt de Hermes
 // ─────────────────────────────────────────────────────────────────────────────
@@ -127,9 +275,13 @@ export const _callHermesDiscord = internalAction({
     message: v.string(),
     contextSummary: v.optional(v.string()),
     promptVersion: v.optional(v.string()),
+    history: v.optional(v.array(v.object({
+      role: v.union(v.literal("user"), v.literal("assistant")),
+      content: v.string(),
+    }))),
   },
   returns: v.string(),
-  handler: async (_ctx, { message, contextSummary, promptVersion }): Promise<string> => {
+  handler: async (_ctx, { message, contextSummary, promptVersion, history }): Promise<string> => {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return "⚠️ El asistente SEPH-AI no está disponible en este momento. Por favor intenta más tarde.";
@@ -138,15 +290,22 @@ export const _callHermesDiscord = internalAction({
     const version = promptVersion ?? LATEST_VERSION;
     const systemPrompt = getSystemPrompt(version);
 
-    const openAiMessages: Array<{ role: "system" | "user"; content: string }> = [
+    const openAiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: systemPrompt },
     ];
 
     if (contextSummary) {
       openAiMessages.push({
         role: "system" as const,
-        content: `Contexto previo del paciente: ${contextSummary}`,
+        content: `Contexto clínico del paciente:\n${contextSummary}`,
       });
+    }
+
+    // Inyectar historial de conversación (últimos N turnos)
+    if (history && history.length > 0) {
+      for (const turn of history) {
+        openAiMessages.push({ role: turn.role, content: turn.content });
+      }
     }
 
     openAiMessages.push({ role: "user", content: message });

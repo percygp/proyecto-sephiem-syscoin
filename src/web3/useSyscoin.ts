@@ -369,6 +369,23 @@ export function useSyscoin() {
     [getWalletClient],
   );
 
+  // Admin registra un médico en DoctorRegistry on-chain (onlyOwner).
+  const registerDoctorOnChain = useCallback(
+    async (medicoAddress: Address, licenseNumber: string, specialty: string): Promise<Hex> => {
+      const { client, account } = await getWalletClient();
+      const txHash = await client.writeContract({
+        ...CONTRACTS.DoctorRegistry,
+        functionName: "registerDoctor",
+        args: [getAddress(medicoAddress), licenseNumber, specialty],
+        account,
+        chain: zkTanenbaum,
+      });
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      return txHash;
+    },
+    [getWalletClient],
+  );
+
   return useMemo(
     () => ({
       address,
@@ -379,7 +396,8 @@ export function useSyscoin() {
       revokeAccess,
       anchorRecord,
       bookAppointmentOnChain,
+      registerDoctorOnChain,
     }),
-    [address, wallet, registerPatient, grantAccess, revokeAccess, anchorRecord, bookAppointmentOnChain],
+    [address, wallet, registerPatient, grantAccess, revokeAccess, anchorRecord, bookAppointmentOnChain, registerDoctorOnChain],
   );
 }

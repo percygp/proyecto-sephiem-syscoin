@@ -140,6 +140,134 @@ export const seedProductionReadinessChecks = internalMutation({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Médicos de prueba para el marketplace
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TEST_SPECIALISTS = [
+  {
+    name: "Dr. Carlos Mendoza Ríos",
+    email: "c.mendoza@sephiem.demo",
+    walletAddress: "0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
+    specialty: "Cardiología",
+    licenseNumber: "CMP-45231",
+    jurisdiction: "Perú",
+    consultationFeeSYS: "50",
+    description: "Especialista en enfermedades cardiovasculares con enfoque en prevención y tratamiento de arritmias e insuficiencia cardíaca.",
+    yearsOfExperience: 15,
+  },
+  {
+    name: "Dra. Ana Torres Villarreal",
+    email: "a.torres@sephiem.demo",
+    walletAddress: "0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c",
+    specialty: "Neurología",
+    licenseNumber: "CMP-38104",
+    jurisdiction: "Perú",
+    consultationFeeSYS: "60",
+    description: "Neuróloga clínica especializada en migraña, epilepsia y trastornos del sueño. Máster en neurociencias aplicadas.",
+    yearsOfExperience: 12,
+  },
+  {
+    name: "Dr. Luis García Palomino",
+    email: "l.garcia@sephiem.demo",
+    walletAddress: "0x3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d",
+    specialty: "Medicina Interna",
+    licenseNumber: "CMP-52018",
+    jurisdiction: "Perú",
+    consultationFeeSYS: "35",
+    description: "Médico internista con amplia experiencia en diagnóstico y manejo de enfermedades crónicas y condiciones complejas.",
+    yearsOfExperience: 8,
+  },
+  {
+    name: "Dra. María Quispe Huanca",
+    email: "m.quispe@sephiem.demo",
+    walletAddress: "0x4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e",
+    specialty: "Ginecología",
+    licenseNumber: "CMP-41756",
+    jurisdiction: "Perú",
+    consultationFeeSYS: "45",
+    description: "Ginecóloga-obstetra con subespecialidad en medicina reproductiva y salud de la mujer en todas las etapas de la vida.",
+    yearsOfExperience: 10,
+  },
+  {
+    name: "Dr. Roberto Chávez Sánchez",
+    email: "r.chavez@sephiem.demo",
+    walletAddress: "0x5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f",
+    specialty: "Traumatología",
+    licenseNumber: "CMP-29843",
+    jurisdiction: "Perú",
+    consultationFeeSYS: "55",
+    description: "Traumatólogo y ortopedista con experiencia en cirugía artroscópica, fracturas complejas y rehabilitación post-quirúrgica.",
+    yearsOfExperience: 20,
+  },
+];
+
+/**
+ * Seed de médicos de prueba para el marketplace MVP.
+ * Idempotente — omite los que ya existen.
+ * npx convex run seed:seedTestSpecialists
+ */
+export const seedTestSpecialists = internalMutation({
+  args: {},
+  returns: v.array(v.string()),
+  handler: async (ctx) => {
+    const results: string[] = [];
+    const now = Date.now();
+
+    for (const spec of TEST_SPECIALISTS) {
+      const tokenId = `demo:${spec.walletAddress}`;
+
+      // Reusar o crear profile
+      let profileId = (
+        await ctx.db
+          .query("profiles")
+          .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", tokenId))
+          .unique()
+      )?._id;
+
+      if (!profileId) {
+        profileId = await ctx.db.insert("profiles", {
+          tokenIdentifier: tokenId,
+          walletAddress: spec.walletAddress,
+          role: "doctor",
+          name: spec.name,
+          email: spec.email,
+          isActive: true,
+        });
+      }
+
+      // Omitir si ya está en marketplace
+      const existing = await ctx.db
+        .query("marketplaceSpecialists")
+        .withIndex("by_profileId", (q) => q.eq("profileId", profileId!))
+        .unique();
+
+      if (existing) {
+        results.push(`SKIP: ${spec.name}`);
+        continue;
+      }
+
+      await ctx.db.insert("marketplaceSpecialists", {
+        profileId: profileId!,
+        licenseNumber: spec.licenseNumber,
+        jurisdiction: spec.jurisdiction,
+        walletAddress: spec.walletAddress,
+        isVerifiedByAdmin: true,
+        isVerifiedOnChain: true,
+        specialty: spec.specialty,
+        description: spec.description,
+        consultationFeeSYS: spec.consultationFeeSYS,
+        yearsOfExperience: spec.yearsOfExperience,
+        createdAt: now,
+        updatedAt: now,
+      });
+      results.push(`INSERT: ${spec.name} — ${spec.specialty}`);
+    }
+
+    return results;
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Orquestador
 // ─────────────────────────────────────────────────────────────────────────────
 

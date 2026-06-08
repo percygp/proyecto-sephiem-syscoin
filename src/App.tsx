@@ -258,7 +258,7 @@ function Logo({ size }: { size: "sm" | "lg" }) {
       >
         <span className="text-porcelain font-bold">S</span>
       </div>
-      <div className="flex flex-col leading-tight">
+      <div className="hidden sm:flex flex-col leading-tight">
         <div className="flex items-center gap-1.5">
           <span className={`font-bold tracking-wide ${textSize}`}>SEPHIEM</span>
           <span className="bg-soft-fawn/15 border border-soft-fawn/40 text-soft-fawn text-[9px] px-1.5 py-0.5 rounded font-mono">
@@ -289,7 +289,8 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm whitespace-nowrap shrink-0 transition-all ${
+      title={label}
+      className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-full text-sm whitespace-nowrap shrink-0 transition-all ${
         active
           ? "bg-slate text-porcelain shadow-inner"
           : "text-porcelain/55 hover:text-porcelain hover:bg-slate/50"
@@ -298,7 +299,7 @@ function TabButton({
       <span className={active ? "text-royal-azure" : "text-porcelain/40"}>
         {icon}
       </span>
-      <span>{label}</span>
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }

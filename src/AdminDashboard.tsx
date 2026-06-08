@@ -3,8 +3,10 @@ import { useQuery, useMutation } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
+import { useSyscoin } from "./web3/useSyscoin";
+import type { Address } from "viem";
 
-type AdminTab = "panel" | "doctores" | "suscripciones" | "facturacion" | "auditoria" | "prg" | "pagos_tardios";
+type AdminTab = "panel" | "doctores" | "suscripciones" | "facturacion" | "auditoria" | "prg" | "pagos_tardios" | "marketplace";
 
 export function AdminDashboard() {
   const { logout, user } = usePrivy();
@@ -176,12 +178,12 @@ function AdminHeader({
           </span>
         </div>
       </div>
-      <nav className="flex-1 flex items-center justify-center gap-1 min-w-0 overflow-x-auto">
+      <nav className="flex-1 flex items-center justify-start sm:justify-center gap-0.5 min-w-0 overflow-x-auto scrollbar-none">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => onTabChange(t.key)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap shrink-0 transition-colors ${
+            className={`px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap shrink-0 transition-colors ${
               activeTab === t.key
                 ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
                 : "text-porcelain/50 hover:text-porcelain hover:bg-graphite"
@@ -367,27 +369,198 @@ function DoctoresTab({
 }) {
   if (!doctors) return <div className="text-porcelain/40 text-sm">Cargando médicos…</div>;
   return (
-    <div className="max-w-4xl space-y-4">
-      <h2 className="text-lg font-bold">Gestión de Médicos</h2>
-      <div className="space-y-2">
-        {doctors.length === 0 && (
-          <div className="text-porcelain/40 text-sm py-8 text-center">No hay médicos registrados</div>
+    <div className="max-w-4xl space-y-8">
+      <MarketplaceSpecialistsSection />
+
+      <div className="space-y-4">
+        <h2 className="text-lg font-bold">Médicos internos</h2>
+        <div className="space-y-2">
+          {doctors.length === 0 && (
+            <div className="text-porcelain/40 text-sm py-8 text-center">No hay médicos registrados</div>
+          )}
+          {doctors.map((d) => (
+            <div key={d._id} className="bg-graphite rounded-xl p-4 border border-mist flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-royal-azure to-ship-cove flex items-center justify-center text-sm font-bold shrink-0">
+                {d.profile.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium truncate">{d.profile.name}</div>
+                <div className="text-xs text-porcelain/60 truncate">{d.specialty} · {d.profile.email}</div>
+              </div>
+              <div className="text-right text-xs shrink-0">
+                <div className="text-porcelain/60">{d.patientCount} pacientes</div>
+                <div className="text-porcelain/40">{d.licenseNumber}</div>
+              </div>
+              <div className={`text-[10px] px-2 py-0.5 rounded font-mono ${d.profile.isActive ? "bg-success/15 text-success" : "bg-soft-fawn/15 text-soft-fawn"}`}>
+                {d.profile.isActive ? "Activo" : "Inactivo"}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MarketplaceSpecialistsSection
+// Permite al admin agregar médicos al marketplace y registrarlos on-chain.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EMPTY_FORM = {
+  name: "", email: "", walletAddress: "", specialty: "",
+  licenseNumber: "", jurisdiction: "", consultationFeeSYS: "",
+  yearsOfExperience: "", description: "",
+};
+
+function MarketplaceSpecialistsSection() {
+  const specialists = useQuery(api.marketplace.specialists.listSpecialistsForAdmin);
+  const registerConvex = useMutation(api.marketplace.specialists.registerSpecialistAsAdmin);
+  const markOnChain = useMutation(api.marketplace.specialists.markSpecialistOnChainVerified);
+  const { registerDoctorOnChain, ready: walletReady } = useSyscoin();
+
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
+  const [chainBusy, setChainBusy] = useState<string | null>(null);
+
+  function setField(k: keyof typeof EMPTY_FORM, v: string) {
+    setForm((p) => ({ ...p, [k]: v }));
+    setStatus(null);
+  }
+
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!walletReady) { setStatus({ type: "err", msg: "Conecta tu wallet de admin para registrar en blockchain." }); return; }
+    setBusy(true);
+    setStatus(null);
+    try {
+      // 1. Crear en Convex (isVerifiedByAdmin=true, isVerifiedOnChain=false)
+      const specialistId = await registerConvex({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        walletAddress: form.walletAddress.trim(),
+        licenseNumber: form.licenseNumber.trim(),
+        jurisdiction: form.jurisdiction.trim() || "Perú",
+        specialty: form.specialty.trim(),
+        consultationFeeSYS: form.consultationFeeSYS.trim(),
+        description: form.description.trim() || undefined,
+        yearsOfExperience: form.yearsOfExperience ? parseInt(form.yearsOfExperience) : undefined,
+      });
+
+      // 2. Registrar on-chain (DoctorRegistry.registerDoctor — onlyOwner)
+      await registerDoctorOnChain(
+        form.walletAddress.trim() as Address,
+        form.licenseNumber.trim(),
+        form.specialty.trim(),
+      );
+
+      // 3. Marcar verificado on-chain en Convex
+      await markOnChain({ specialistId });
+
+      setForm(EMPTY_FORM);
+      setStatus({ type: "ok", msg: `✓ ${form.name} registrado en marketplace y blockchain.` });
+    } catch (err) {
+      setStatus({ type: "err", msg: (err as Error).message ?? "Error desconocido" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRegisterOnChain(s: { _id: Id<"marketplaceSpecialists">; walletAddress: string; licenseNumber: string; specialty: string }) {
+    if (!walletReady) return;
+    setChainBusy(s._id);
+    try {
+      await registerDoctorOnChain(s.walletAddress as Address, s.licenseNumber, s.specialty);
+      await markOnChain({ specialistId: s._id });
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setChainBusy(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-bold">Marketplace de Especialistas</h2>
+
+      {/* Form: nuevo médico */}
+      <form onSubmit={(e) => void handleSubmit(e)} className="bg-graphite border border-mist rounded-xl p-5 space-y-4">
+        <p className="text-sm font-medium text-porcelain/80">Agregar médico al marketplace</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {([
+            ["name", "Nombre completo", "text"],
+            ["email", "Email", "email"],
+            ["walletAddress", "Wallet (0x...)", "text"],
+            ["specialty", "Especialidad", "text"],
+            ["licenseNumber", "N° de colegiatura", "text"],
+            ["jurisdiction", "Jurisdicción (Perú)", "text"],
+            ["consultationFeeSYS", "Tarifa (SYS)", "text"],
+            ["yearsOfExperience", "Años de experiencia", "number"],
+          ] as [keyof typeof EMPTY_FORM, string, string][]).map(([key, label, type]) => (
+            <div key={key}>
+              <label className="block text-[10px] uppercase tracking-wider text-porcelain/45 mb-1">{label}</label>
+              <input
+                type={type}
+                value={form[key]}
+                onChange={(e) => setField(key, e.target.value)}
+                required={key !== "yearsOfExperience" && key !== "jurisdiction"}
+                className="w-full bg-ink border border-mist rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-royal-azure/60 placeholder:text-porcelain/25"
+              />
+            </div>
+          ))}
+          <div className="sm:col-span-2">
+            <label className="block text-[10px] uppercase tracking-wider text-porcelain/45 mb-1">Descripción (opcional)</label>
+            <input
+              type="text"
+              value={form.description}
+              onChange={(e) => setField("description", e.target.value)}
+              className="w-full bg-ink border border-mist rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-royal-azure/60"
+            />
+          </div>
+        </div>
+        {status && (
+          <p className={`text-xs ${status.type === "ok" ? "text-success" : "text-soft-fawn"}`}>{status.msg}</p>
         )}
-        {doctors.map((d) => (
-          <div key={d._id} className="bg-graphite rounded-xl p-4 border border-mist flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-royal-azure to-ship-cove flex items-center justify-center text-sm font-bold shrink-0">
-              {d.profile.name.charAt(0).toUpperCase()}
-            </div>
+        <button
+          type="submit"
+          disabled={busy || !walletReady}
+          className="bg-royal-azure hover:bg-royal-azure/90 disabled:opacity-40 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors flex items-center gap-2"
+        >
+          {busy ? <><span className="animate-spin inline-block">⟳</span> Registrando…</> : "⛓ Agregar + Registrar en blockchain"}
+        </button>
+        {!walletReady && <p className="text-xs text-porcelain/40">Conecta tu wallet de admin (propietario del contrato DoctorRegistry).</p>}
+      </form>
+
+      {/* Lista de especialistas actuales */}
+      <div className="space-y-2">
+        {specialists === undefined && <p className="text-porcelain/40 text-sm">Cargando…</p>}
+        {specialists?.length === 0 && <p className="text-porcelain/40 text-sm py-4 text-center">Sin especialistas en el marketplace.</p>}
+        {specialists?.map((s) => (
+          <div key={s._id} className="bg-graphite border border-mist rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex-1 min-w-0">
-              <div className="font-medium truncate">{d.profile.name}</div>
-              <div className="text-xs text-porcelain/60 truncate">{d.specialty} · {d.profile.email}</div>
+              <div className="font-medium truncate">{s.name || "—"}</div>
+              <div className="text-xs text-porcelain/55">{s.specialty} · {s.licenseNumber}</div>
+              <div className="text-[10px] font-mono text-porcelain/40 truncate mt-0.5">{s.walletAddress}</div>
             </div>
-            <div className="text-right text-xs shrink-0">
-              <div className="text-porcelain/60">{d.patientCount} pacientes</div>
-              <div className="text-porcelain/40">{d.licenseNumber}</div>
-            </div>
-            <div className={`text-[10px] px-2 py-0.5 rounded font-mono ${d.profile.isActive ? "bg-success/15 text-success" : "bg-soft-fawn/15 text-soft-fawn"}`}>
-              {d.profile.isActive ? "Activo" : "Inactivo"}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] px-2 py-0.5 rounded-full border bg-success/10 text-success border-success/30">
+                ✓ Admin
+              </span>
+              {s.isVerifiedOnChain ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full border bg-royal-azure/10 text-royal-azure border-royal-azure/30">
+                  ⛓ On-chain
+                </span>
+              ) : (
+                <button
+                  disabled={chainBusy === s._id || !walletReady}
+                  onClick={() => void handleRegisterOnChain(s)}
+                  className="text-[10px] px-2 py-0.5 rounded-full border border-soft-fawn/40 text-soft-fawn hover:bg-soft-fawn/10 disabled:opacity-40 transition-colors"
+                >
+                  {chainBusy === s._id ? "⟳ Registrando…" : "⛓ Registrar on-chain"}
+                </button>
+              )}
+              <span className="text-xs text-porcelain/45">S/. {s.consultationFeeSYS}</span>
             </div>
           </div>
         ))}

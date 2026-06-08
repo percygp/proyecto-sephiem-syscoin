@@ -21,7 +21,7 @@ export function PaymentsSection() {
   const walletAddress = wallets[0]?.address;
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="max-w-3xl mx-auto">
         <div className="mb-6">
           <h1 className="text-xl font-semibold mb-1">Configuración</h1>
@@ -245,30 +245,32 @@ function Web3IdentitySection({ walletAddress }: { walletAddress: Address }) {
             ) : (
               <div className="flex flex-col gap-1.5">
                 {records.map((recordId) => (
-                  <div key={recordId} className="flex items-center gap-2 bg-ink border border-mist rounded px-2 py-1.5">
-                    <code className="flex-1 text-[10px] font-mono text-porcelain/70 truncate">{recordId}</code>
-                    <button
-                      onClick={() => void doVerify(recordId)}
-                      className="text-[10px] font-mono text-royal-azure hover:underline shrink-0"
-                    >
-                      Verificar
-                    </button>
-                    {verifyResults[recordId] !== undefined && verifyResults[recordId] !== null && (
-                      <span className={`text-[10px] font-mono shrink-0 ${verifyResults[recordId] ? "text-success" : "text-soft-fawn"}`}>
-                        {verifyResults[recordId] ? "✓ íntegro" : "✗ alterado"}
-                      </span>
-                    )}
-                    {verifyResults[recordId] === null && (
-                      <span className="text-[10px] font-mono text-porcelain/40 shrink-0">…</span>
-                    )}
-                    <a
-                      href={explorerTx(recordId)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[10px] font-mono text-porcelain/40 hover:text-porcelain shrink-0"
-                    >
-                      Explorer →
-                    </a>
+                  <div key={recordId} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 bg-ink border border-mist rounded px-2 py-2">
+                    <code className="flex-1 text-[10px] font-mono text-porcelain/70 truncate min-w-0">{recordId}</code>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => void doVerify(recordId)}
+                        className="text-[10px] font-mono text-royal-azure hover:underline"
+                      >
+                        Verificar
+                      </button>
+                      {verifyResults[recordId] !== undefined && verifyResults[recordId] !== null && (
+                        <span className={`text-[10px] font-mono ${verifyResults[recordId] ? "text-success" : "text-soft-fawn"}`}>
+                          {verifyResults[recordId] ? "✓ íntegro" : "✗ alterado"}
+                        </span>
+                      )}
+                      {verifyResults[recordId] === null && (
+                        <span className="text-[10px] font-mono text-porcelain/40">…</span>
+                      )}
+                      <a
+                        href={explorerTx(recordId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-mono text-porcelain/40 hover:text-porcelain"
+                      >
+                        Explorer →
+                      </a>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -341,7 +343,7 @@ function DiscordLinkCard() {
         <form onSubmit={(e) => void handleLink(e)} className="flex flex-col gap-3">
           <div className="text-xs text-porcelain/60 bg-ink border border-mist/50 rounded-lg p-3">
             <p className="font-medium text-porcelain/80 mb-1">¿Cómo obtener tu Discord ID?</p>
-            <p>Escribe <code className="bg-graphite px-1 rounded">!vincular</code> en el servidor de Discord. El bot te enviará tu ID por DM.</p>
+            <p>Ingresa al servidor de SEPHIEM y escribe <code className="bg-graphite px-1 rounded">!estado</code>. El bot te enviará tu ID por DM.{" "}<a href="https://discord.gg/hg5fmpEm" target="_blank" rel="noopener noreferrer" className="text-royal-azure underline hover:text-royal-azure/80">Unirse al servidor →</a></p>
           </div>
           <div className="flex gap-2">
             <input

@@ -363,7 +363,7 @@ function PatientDetail({ patientId }: { patientId: Id<"patients"> }) {
   return (
     <main className="flex-1 flex flex-col overflow-hidden bg-ink">
       {/* Cabecera */}
-      <div className="px-6 py-4 border-b border-mist">
+      <div className="px-4 sm:px-6 py-4 border-b border-mist">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-lg font-semibold">
             {detail.patient.profile.name}
@@ -394,7 +394,7 @@ function PatientDetail({ patientId }: { patientId: Id<"patients"> }) {
       </div>
 
       {/* Expediente: 2 columnas */}
-      <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Consultas */}
         <Section title="Consultas">
           {detail.consultations.length === 0 ? (

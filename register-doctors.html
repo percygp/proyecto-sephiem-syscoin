@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>SEPHIEM — Registrar médicos en DoctorRegistry</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #0d1117; color: #c9d1d9; max-width: 700px; margin: 40px auto; padding: 20px; }
+    h1  { color: #58a6ff; font-size: 1.1rem; margin-bottom: 4px; }
+    p   { color: #8b949e; font-size: 0.85rem; margin-top: 4px; }
+    button { background: #1f6feb; color: #fff; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-family: monospace; margin: 8px 4px 8px 0; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.secondary { background: #21262d; border: 1px solid #30363d; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px 18px; margin: 10px 0; }
+    .status { font-size: 0.78rem; margin-top: 6px; }
+    .ok   { color: #3fb950; }
+    .err  { color: #f85149; }
+    .wait { color: #d29922; }
+    .log  { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px; margin-top: 20px; font-size: 0.75rem; max-height: 240px; overflow-y: auto; color: #8b949e; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>⛓ SEPHIEM — Registro de médicos en DoctorRegistry</h1>
+  <p>Red: zkSYS Testnet · Chain ID 57057 · RPC https://rpc.tanenbaum.io</p>
+  <p>Contrato: <code>0xb71a157762730C94Ea6675Ed0bDb96eA38d7451a</code></p>
+  <p style="color:#f85149;font-size:0.8rem;">
+    ⚠️ Conecta la wallet <strong>owner</strong> del contrato DoctorRegistry.<br>
+    Necesitarás aprobar 5 transacciones (una por médico). Cada una tarda ~5–15 s.
+  </p>
+
+  <div style="margin:16px 0">
+    <button id="btnConnect" onclick="connectWallet()">Conectar MetaMask</button>
+    <button id="btnRegAll"  onclick="registerAll()" disabled class="secondary">Registrar los 5 médicos →</button>
+    <span id="walletLabel" style="font-size:0.78rem;color:#8b949e;margin-left:8px;"></span>
+  </div>
+
+  <div id="doctors"></div>
+  <div class="log" id="log">Esperando conexión…</div>
+
+<script>
+const CHAIN_ID_HEX = "0xDEE1"; // 57057
+const CHAIN_ID_DEC = 57057;
+const RPC_URL      = "https://rpc.tanenbaum.io";
+const CONTRACT_ADDR = "0xb71a157762730C94Ea6675Ed0bDb96eA38d7451a";
+const EXPLORER_TX  = "https://tanenbaum.io/tx/";
+
+const ABI = [
+  "function registerDoctor(address medico, string colegiatura, string especializacion) external",
+  "function isVerified(address addr) external view returns (bool)"
+];
+
+const DOCTORS = [
+  { name: "Dr. Carlos Mendoza Ríos",    wallet: "0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b", colegiatura: "CMP-45231", especializacion: "Cardiologia" },
+  { name: "Dra. Ana Torres Villarreal", wallet: "0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c", colegiatura: "CMP-38104", especializacion: "Neurologia" },
+  { name: "Dr. Luis García Palomino",   wallet: "0x3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d", colegiatura: "CMP-52018", especializacion: "Medicina Interna" },
+  { name: "Dra. María Quispe Huanca",   wallet: "0x4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e", colegiatura: "CMP-41756", especializacion: "Ginecologia" },
+  { name: "Dr. Roberto Chávez Sánchez", wallet: "0x5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f", colegiatura: "CMP-29843", especializacion: "Traumatologia" },
+];
+
+let signer = null;
+let contract = null;
+let readContract = null;
+
+function log(msg) {
+  const el = document.getElementById("log");
+  el.textContent += "\n" + msg;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(i, cls, msg) {
+  const el = document.getElementById("status-" + i);
+  if (el) { el.className = "status " + cls; el.textContent = msg; }
+}
+
+async function connectWallet() {
+  if (!window.ethereum) { alert("MetaMask no detectado. Instala la extensión."); return; }
+  try {
+    await ethereum.request({ method: "eth_requestAccounts" });
+
+    // Cambiar a zkSYS Testnet
+    try {
+      await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_ID_HEX }] });
+    } catch (e) {
+      if (e.code === 4902) {
+        await ethereum.request({ method: "wallet_addEthereumChain", params: [{
+          chainId: CHAIN_ID_HEX,
+          chainName: "Syscoin zkEVM Testnet",
+          rpcUrls: [RPC_URL],
+          nativeCurrency: { name: "SYS", symbol: "SYS", decimals: 18 },
+          blockExplorerUrls: ["https://tanenbaum.io"]
+        }]});
+        await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_ID_HEX }] });
+      } else { throw e; }
+    }
+
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    signer = await provider.getSigner();
+    const addr = await signer.getAddress();
+
+    // Contract con signer para escribir, con provider para leer
+    contract     = new ethers.Contract(CONTRACT_ADDR, ABI, signer);
+    readContract = new ethers.Contract(CONTRACT_ADDR, ABI, provider);
+
+    document.getElementById("walletLabel").textContent = addr.slice(0,6) + "…" + addr.slice(-4);
+    document.getElementById("btnConnect").textContent  = "✓ Conectado";
+    document.getElementById("btnConnect").disabled     = true;
+    document.getElementById("btnRegAll").disabled      = false;
+
+    log("✓ Wallet conectada: " + addr);
+    await checkAllStatus();
+  } catch (e) {
+    log("✗ Error: " + (e.message ?? e));
+  }
+}
+
+async function checkAllStatus() {
+  log("Verificando estado on-chain de los 5 médicos…");
+  for (let i = 0; i < DOCTORS.length; i++) {
+    try {
+      const ok = await readContract.isVerified(DOCTORS[i].wallet);
+      setStatus(i, ok ? "ok" : "wait", ok ? "✓ Ya registrado on-chain" : "⏳ Pendiente de registro");
+    } catch (e) {
+      setStatus(i, "err", "✗ Error al verificar: " + e.message);
+    }
+  }
+}
+
+async function registerAll() {
+  document.getElementById("btnRegAll").disabled = true;
+  log("\n▶ Iniciando registro de 5 médicos en DoctorRegistry…");
+
+  for (let i = 0; i < DOCTORS.length; i++) {
+    const d = DOCTORS[i];
+    log(`\n[${i+1}/5] ${d.name}`);
+
+    let already = false;
+    try { already = await readContract.isVerified(d.wallet); } catch {}
+
+    if (already) {
+      setStatus(i, "ok", "✓ Ya registrado — saltando");
+      log("  SKIP: ya está registrado");
+      continue;
+    }
+
+    setStatus(i, "wait", "⏳ Esperando firma en MetaMask…");
+    try {
+      const tx = await contract.registerDoctor(d.wallet, d.colegiatura, d.especializacion);
+      setStatus(i, "wait", "⏳ Confirmando tx…");
+      log("  TX enviada: " + EXPLORER_TX + tx.hash);
+
+      await tx.wait(1);
+      setStatus(i, "ok", "✓ Registrado — " + tx.hash.slice(0,14) + "…");
+      log("  ✓ Confirmado: " + EXPLORER_TX + tx.hash);
+    } catch (e) {
+      const msg = e?.reason ?? e?.message ?? String(e);
+      setStatus(i, "err", "✗ " + msg.slice(0, 80));
+      log("  ✗ Error: " + msg);
+    }
+  }
+
+  log("\n✅ Proceso finalizado. Puedes cerrar esta ventana.");
+  document.getElementById("btnRegAll").disabled = false;
+}
+
+// Renderizar cards de médicos
+const container = document.getElementById("doctors");
+DOCTORS.forEach((d, i) => {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <strong>${d.name}</strong>&nbsp;
+    <span style="color:#8b949e;font-size:0.78rem">${d.especializacion} · ${d.colegiatura}</span>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:2px;word-break:break-all">${d.wallet}</div>
+    <div class="status wait" id="status-${i}">⏳ Conecta wallet para verificar estado</div>
+  `;
+  container.appendChild(card);
+});
+</script>
+</body>
+</html>

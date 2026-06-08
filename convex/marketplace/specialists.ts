@@ -167,6 +167,145 @@ export const getSpecialistPayoutWallet = mutation({
 });
 
 /**
+ * registerSpecialistAsAdmin — admin agrega un especialista directamente,
+ * marcándolo como verificado sin necesitar auto-registro previo.
+ */
+export const registerSpecialistAsAdmin = mutation({
+  args: {
+    name: v.string(),
+    email: v.string(),
+    walletAddress: v.string(),
+    licenseNumber: v.string(),
+    jurisdiction: v.string(),
+    specialty: v.string(),
+    consultationFeeSYS: v.string(),
+    description: v.optional(v.string()),
+    yearsOfExperience: v.optional(v.number()),
+  },
+  returns: v.id("marketplaceSpecialists"),
+  handler: async (ctx, args) => {
+    await requireFeatureFlag(ctx, "marketplaceEnabled");
+    const admin = await requireAdmin(ctx);
+
+    assertStringLength(args.name, 1, 150, "name");
+    assertStringLength(args.email, 3, 200, "email");
+    assertStringLength(args.licenseNumber, 1, 100, "licenseNumber");
+    assertStringLength(args.jurisdiction, 1, 100, "jurisdiction");
+    assertStringLength(args.specialty, 1, 100, "specialty");
+    assertStringLength(args.consultationFeeSYS, 1, 50, "consultationFeeSYS");
+    assertEvmAddress(args.walletAddress, "walletAddress");
+
+    // Crear perfil temporal para el especialista
+    const profileId = await ctx.db.insert("profiles", {
+      tokenIdentifier: `admin-created:${args.walletAddress.toLowerCase()}`,
+      walletAddress: args.walletAddress.toLowerCase(),
+      role: "doctor",
+      name: args.name.trim(),
+      email: args.email.trim(),
+      isActive: true,
+    });
+
+    // Verificar unicidad por walletAddress en marketplaceSpecialists
+    const existing = await ctx.db
+      .query("marketplaceSpecialists")
+      .withIndex("by_profileId", (q) => q.eq("profileId", profileId))
+      .unique();
+    if (existing) throw new ConvexError({ code: "ALREADY_EXISTS", message: "Especialista ya registrado" });
+
+    const now = Date.now();
+    const specialistId = await ctx.db.insert("marketplaceSpecialists", {
+      profileId,
+      licenseNumber: args.licenseNumber.trim(),
+      jurisdiction: args.jurisdiction.trim(),
+      walletAddress: args.walletAddress.toLowerCase(),
+      isVerifiedByAdmin: true,
+      isVerifiedOnChain: false,
+      specialty: args.specialty.trim(),
+      description: args.description,
+      consultationFeeSYS: args.consultationFeeSYS.trim(),
+      yearsOfExperience: args.yearsOfExperience,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.runMutation(internal.audit.log, {
+      actorProfileId: admin._id,
+      actorType: "admin",
+      action: "SPECIALIST_REGISTERED",
+      targetId: specialistId,
+      channel: "web",
+    });
+
+    return specialistId;
+  },
+});
+
+/**
+ * markSpecialistOnChainVerified — admin marca que el especialista fue
+ * registrado en DoctorRegistry on-chain (después de firmar la tx en el frontend).
+ */
+export const markSpecialistOnChainVerified = mutation({
+  args: { specialistId: v.id("marketplaceSpecialists") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(ctx);
+    const specialist = await ctx.db.get("marketplaceSpecialists", args.specialistId);
+    if (!specialist) throw new ConvexError({ code: "NOT_FOUND", message: "Especialista no encontrado" });
+
+    await ctx.db.patch(args.specialistId, { isVerifiedOnChain: true, updatedAt: Date.now() });
+
+    await ctx.runMutation(internal.audit.log, {
+      actorProfileId: admin._id,
+      actorType: "admin",
+      action: "SPECIALIST_APPROVED",
+      targetId: args.specialistId,
+      channel: "web",
+    });
+
+    return null;
+  },
+});
+
+/**
+ * listSpecialistsForAdmin — lista todos los especialistas (pendientes + verificados)
+ * para gestión interna. Devuelve walletAddress solo a admin.
+ */
+export const listSpecialistsForAdmin = query({
+  args: {},
+  returns: v.array(v.object({
+    _id: v.id("marketplaceSpecialists"),
+    name: v.string(),
+    specialty: v.string(),
+    licenseNumber: v.string(),
+    walletAddress: v.string(),
+    isVerifiedByAdmin: v.boolean(),
+    isVerifiedOnChain: v.optional(v.boolean()),
+    consultationFeeSYS: v.string(),
+    createdAt: v.number(),
+  })),
+  handler: async (ctx) => {
+    const caller = await getCallerProfile(ctx);
+    if (!caller || caller.role !== "admin") return [];
+
+    const all = await ctx.db.query("marketplaceSpecialists").order("desc").collect();
+    return Promise.all(all.map(async (s) => {
+      const profile = await ctx.db.get("profiles", s.profileId);
+      return {
+        _id: s._id,
+        name: profile?.name ?? "",
+        specialty: s.specialty,
+        licenseNumber: s.licenseNumber,
+        walletAddress: s.walletAddress,
+        isVerifiedByAdmin: s.isVerifiedByAdmin,
+        isVerifiedOnChain: s.isVerifiedOnChain,
+        consultationFeeSYS: s.consultationFeeSYS,
+        createdAt: s.createdAt,
+      };
+    }));
+  },
+});
+
+/**
  * getSpecialistWalletForBooking — devuelve walletAddress al paciente autenticado
  * ÚNICAMENTE para firmar bookAppointment en AppointmentRegistry. No mostrar en UI.
  */
@@ -205,8 +344,10 @@ export const getSpecialists = query({
       v.object({
         _id: v.id("marketplaceSpecialists"),
         _creationTime: v.number(),
+        name: v.string(),
         specialty: v.string(),
         isVerifiedByAdmin: v.boolean(),
+        isVerifiedOnChain: v.optional(v.boolean()),
         consultationFeeSYS: v.string(),
         yearsOfExperience: v.optional(v.number()),
         rating: v.union(v.number(), v.null()),
@@ -228,12 +369,17 @@ export const getSpecialists = query({
 
     const enriched = await Promise.all(
       result.page.map(async (s) => {
-        const { rating } = await computeSpecialistRating(ctx, s._id);
+        const [{ rating }, profile] = await Promise.all([
+          computeSpecialistRating(ctx, s._id),
+          ctx.db.get("profiles", s.profileId),
+        ]);
         return {
           _id: s._id,
           _creationTime: s._creationTime,
+          name: profile?.name ?? "",
           specialty: s.specialty,
           isVerifiedByAdmin: s.isVerifiedByAdmin,
+          isVerifiedOnChain: s.isVerifiedOnChain,
           consultationFeeSYS: s.consultationFeeSYS,
           yearsOfExperience: s.yearsOfExperience,
           rating,
@@ -281,6 +427,7 @@ export const getSpecialistDetail = query({
       consultationFeeSYS: v.string(),
       description: v.optional(v.string()),
       rating: v.union(v.number(), v.null()),
+      isVerifiedOnChain: v.optional(v.boolean()),
       walletVerified: v.boolean(),
     }),
     v.null(),
@@ -303,6 +450,7 @@ export const getSpecialistDetail = query({
       consultationFeeSYS: specialist.consultationFeeSYS,
       description: specialist.description,
       rating,
+      isVerifiedOnChain: specialist.isVerifiedOnChain,
       walletVerified: specialist.walletAddress.length > 0,
     };
   },

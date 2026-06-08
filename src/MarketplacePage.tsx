@@ -100,10 +100,15 @@ function Stars({ rating }: { rating: number | null }) {
   );
 }
 
-function VerifiedBadge() {
+function VerifiedBadge({ onChain }: { onChain?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-royal-azure/15 text-royal-azure border border-royal-azure/30">
-      ✓ Verificado
+    <span className={
+      "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border " +
+      (onChain
+        ? "bg-royal-azure/15 text-royal-azure border-royal-azure/30"
+        : "bg-success/10 text-success border-success/30")
+    }>
+      {onChain ? "⛓ Blockchain" : "✓ Verificado"}
     </span>
   );
 }
@@ -123,7 +128,7 @@ export function MarketplacePage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center gap-2 mb-5">
           <TabButton active={view === "especialistas"} onClick={() => setView("especialistas")}>
@@ -222,9 +227,12 @@ function SpecialistsList({
               onClick={() => onSelect(s._id)}
               className="text-left bg-graphite border border-mist rounded-xl p-4 hover:border-royal-azure/50 transition-colors"
             >
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium">{s.specialty}</span>
-                <VerifiedBadge />
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{s.name || s.specialty}</div>
+                  <div className="text-xs text-porcelain/55 truncate">{s.specialty}</div>
+                </div>
+                <VerifiedBadge onChain={s.isVerifiedOnChain} />
               </div>
               <Stars rating={s.rating} />
               <div className="mt-3 text-sm text-porcelain/70">
@@ -267,11 +275,13 @@ function SpecialistDetail({
   const detail      = useQuery(api.marketplace.specialists.getSpecialistDetail, { specialistId });
   const realSlots   = useQuery(api.appointments.queries.getAvailableSlots, { specialistId });
   const doctorWallet = useQuery(api.marketplace.specialists.getSpecialistWalletForBooking, { specialistId });
+  const myPatient   = useQuery(api.patients.onboarding.getMyPatient, {});
   const createHold  = useAction(api.appointments.booking.createAppointmentHold);
   const saveOnChain = useMutation(api.appointments.booking.saveOnChainData);
   const { bookAppointmentOnChain, ready: walletReady } = useSyscoin();
 
   const [showModal, setShowModal] = useState(false);
+  const [showRegGate, setShowRegGate] = useState(false);
   const [booking, setBooking] = useState<{
     appointmentId: Id<"appointments">;
     derivedAddress: string;
@@ -279,6 +289,18 @@ function SpecialistDetail({
     startedAt: number;
     onChainTxHash: string;
   } | null>(null);
+
+  // myPatient===undefined → cargando; null → no registrado; object → registrado
+  const isPatient = !!myPatient;
+  const patientLoading = myPatient === undefined;
+
+  function handleAgendarClick() {
+    if (!isPatient) {
+      setShowRegGate(true);
+    } else {
+      setShowModal(true);
+    }
+  }
 
   if (booking) {
     return (
@@ -294,7 +316,7 @@ function SpecialistDetail({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="max-w-2xl mx-auto">
         <button onClick={onBack} className="text-sm text-porcelain/60 hover:text-porcelain mb-4">
           ← Volver al marketplace
@@ -308,12 +330,12 @@ function SpecialistDetail({
         )}
         {detail && (
           <div className="bg-graphite border border-mist rounded-xl p-6">
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <h1 className="text-xl font-semibold">{detail.name || "Especialista"}</h1>
                 <p className="text-porcelain/60">{detail.specialty}</p>
               </div>
-              <VerifiedBadge />
+              <VerifiedBadge onChain={detail.isVerifiedOnChain} />
             </div>
             <div className="mt-3">
               <Stars rating={detail.rating} />
@@ -332,11 +354,18 @@ function SpecialistDetail({
             )}
 
             <div className="mt-6 pt-5 border-t border-mist">
+              {!patientLoading && !isPatient && (
+                <div className="mb-3 text-xs text-soft-fawn bg-soft-fawn/10 border border-soft-fawn/30 rounded-lg px-3 py-2">
+                  ⚠️ Debes registrarte como paciente en la blockchain antes de agendar.
+                </div>
+              )}
               <button
-                onClick={() => setShowModal(true)}
-                className="w-full py-3 rounded-xl bg-royal-azure text-white text-sm font-semibold hover:bg-royal-azure/90 transition-colors flex items-center justify-center gap-2"
+                onClick={handleAgendarClick}
+                disabled={patientLoading}
+                className="w-full py-3 rounded-xl bg-royal-azure text-white text-sm font-semibold hover:bg-royal-azure/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
-                <span>📅</span> Agendar Cita
+                <span>{isPatient ? "📅" : "🔐"}</span>
+                {patientLoading ? "Verificando…" : isPatient ? "Agendar Cita" : "Registrarme y Agendar"}
               </button>
               <p className="text-[11px] text-porcelain/35 mt-2 text-center font-mono">
                 ⛓ Se registrará en Syscoin zkEVM · Requiere firma con MetaMask
@@ -346,10 +375,18 @@ function SpecialistDetail({
         )}
       </div>
 
+      {showRegGate && (
+        <PatientRegistrationGate
+          onComplete={() => { setShowRegGate(false); setShowModal(true); }}
+          onClose={() => setShowRegGate(false)}
+        />
+      )}
+
       {showModal && detail && (
         <BookingModal
           detail={detail}
           doctorWalletAddress={doctorWallet?.walletAddress ?? null}
+          isPatient={isPatient}
           walletReady={walletReady}
           realSlots={realSlots}
           bookAppointmentOnChain={bookAppointmentOnChain}
@@ -363,9 +400,209 @@ function SpecialistDetail({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PatientRegistrationGate — registra al usuario como paciente antes de agendar
+// Paso 1: firma blockchain (PatientRegistry)
+// Paso 2: datos básicos del perfil (completeOnboarding)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PatientRegistrationGate({
+  onComplete,
+  onClose,
+}: {
+  onComplete: () => void;
+  onClose: () => void;
+}) {
+  const { registerPatient, ready: walletReady } = useSyscoin();
+  const completeOnboarding = useMutation(api.patients.onboarding.completeOnboarding);
+  const myProfile = useQuery(api.auth.profiles.getMyProfile, {});
+
+  const [step, setStep] = useState<"blockchain" | "profile" | "done">("blockchain");
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [dob, setDob] = useState("");
+
+  // Pre-fill from existing profile when available
+  useEffect(() => {
+    if (myProfile) {
+      if (myProfile.name) setName(myProfile.name);
+      if (myProfile.email) setEmail(myProfile.email);
+    }
+  }, [myProfile]);
+
+  async function handleBlockchain() {
+    if (!walletReady) { setError("Conecta tu wallet MetaMask para continuar."); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const hash = await registerPatient();
+      setTxHash(hash as string);
+      setStep("profile");
+    } catch (e) {
+      setError((e as Error).message ?? "Error al registrar en blockchain");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleProfile(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !dob) { setError("Completa todos los campos."); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      await completeOnboarding({ name: name.trim(), email: email.trim(), dateOfBirth: dob });
+      setStep("done");
+      setTimeout(onComplete, 1200);
+    } catch (e) {
+      setError((e as Error).message ?? "Error al guardar perfil");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const STEPS = [
+    { key: "blockchain", label: "Blockchain" },
+    { key: "profile",    label: "Perfil" },
+    { key: "done",       label: "Listo" },
+  ] as const;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/70 backdrop-blur-sm">
+      <div className="bg-graphite border border-mist rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl flex flex-col max-h-[90vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-mist shrink-0">
+          <div>
+            <h2 className="font-semibold text-base">Registro de paciente</h2>
+            <p className="text-xs text-porcelain/50">Requerido para agendar citas</p>
+          </div>
+          <button onClick={onClose} className="text-porcelain/40 hover:text-porcelain text-xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-mist/30">✕</button>
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex items-center gap-0 px-5 pt-4 shrink-0">
+          {STEPS.map((s, i) => (
+            <div key={s.key} className="flex items-center gap-0 flex-1">
+              <div className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold shrink-0 ${
+                step === s.key ? "bg-royal-azure text-white" :
+                STEPS.indexOf(STEPS.find(x => x.key === step)!) > i ? "bg-success text-white" :
+                "bg-mist text-porcelain/40"
+              }`}>
+                {STEPS.indexOf(STEPS.find(x => x.key === step)!) > i ? "✓" : i + 1}
+              </div>
+              <span className={`text-[10px] ml-1.5 ${step === s.key ? "text-porcelain" : "text-porcelain/40"}`}>{s.label}</span>
+              {i < STEPS.length - 1 && <div className="flex-1 h-px bg-mist mx-2" />}
+            </div>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          {error && (
+            <div className="mb-4 text-xs text-soft-fawn bg-soft-fawn/10 border border-soft-fawn/30 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+
+          {step === "blockchain" && (
+            <div className="space-y-4">
+              <div className="bg-ink border border-mist rounded-xl p-4 text-sm space-y-2">
+                <p className="font-medium">¿Qué es esto?</p>
+                <p className="text-porcelain/60 text-xs leading-relaxed">
+                  SEPHIEM registra tu identidad como paciente en el contrato <code className="bg-graphite px-1 rounded">PatientRegistry</code> de Syscoin zkEVM. Esto garantiza que tus citas queden ancladas on-chain y no pueden ser alteradas.
+                </p>
+              </div>
+              <div className="text-xs text-porcelain/50 bg-royal-azure/5 border border-royal-azure/20 rounded-lg px-3 py-2">
+                ⛓ Red: Syscoin zkEVM Testnet · Gas mínimo requerido
+              </div>
+              {!walletReady && (
+                <p className="text-xs text-soft-fawn">Conecta tu wallet MetaMask para continuar.</p>
+              )}
+              <button
+                onClick={() => void handleBlockchain()}
+                disabled={busy || !walletReady}
+                className="w-full py-3 rounded-xl bg-royal-azure text-white text-sm font-semibold hover:bg-royal-azure/90 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+              >
+                {busy
+                  ? <><span className="animate-spin inline-block">⟳</span> Firmando…</>
+                  : <><span>⛓</span> Registrarme en blockchain</>}
+              </button>
+            </div>
+          )}
+
+          {step === "profile" && (
+            <form onSubmit={(e) => void handleProfile(e)} className="space-y-4">
+              {txHash && (
+                <div className="flex items-center gap-2 text-xs text-success bg-success/10 border border-success/20 rounded-lg px-3 py-2">
+                  <span>✓</span>
+                  <span>Registrado en blockchain</span>
+                  <a href={explorerTx(txHash as Parameters<typeof explorerTx>[0])} target="_blank" rel="noopener noreferrer" className="ml-auto underline">Ver tx →</a>
+                </div>
+              )}
+              <p className="text-sm text-porcelain/70">Completa tus datos básicos para crear tu perfil de paciente.</p>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-porcelain/45 mb-1">Nombre completo</label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-ink border border-mist rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-royal-azure/60"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-porcelain/45 mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-ink border border-mist rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-royal-azure/60"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-porcelain/45 mb-1">Fecha de nacimiento</label>
+                <input
+                  type="date"
+                  required
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  max={new Date().toISOString().split("T")[0]}
+                  className="w-full bg-ink border border-mist rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-royal-azure/60"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full py-3 rounded-xl bg-royal-azure text-white text-sm font-semibold hover:bg-royal-azure/90 disabled:opacity-40 transition-colors"
+              >
+                {busy ? <><span className="animate-spin inline-block">⟳</span> Guardando…</> : "Guardar y continuar"}
+              </button>
+            </form>
+          )}
+
+          {step === "done" && (
+            <div className="text-center py-8 space-y-3">
+              <div className="text-5xl">✅</div>
+              <p className="font-semibold">¡Registro completado!</p>
+              <p className="text-xs text-porcelain/55">Abriendo selector de citas…</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BookingModal({
   detail,
   doctorWalletAddress,
+  isPatient,
   walletReady,
   realSlots,
   bookAppointmentOnChain,
@@ -376,6 +613,7 @@ function BookingModal({
 }: {
   detail: { name: string; specialty: string; consultationFeeSYS: string };
   doctorWalletAddress: string | null;
+  isPatient: boolean;
   walletReady: boolean;
   realSlots: Array<{ _id: Id<"appointmentSlots">; startTime: number; endTime: number }> | undefined;
   bookAppointmentOnChain: (addr: Address, ts: number) => Promise<{ appointmentId: string; txHash: string }>;
@@ -405,6 +643,7 @@ function BookingModal({
   async function confirmar() {
     if (!selected) return;
     if (!walletReady) { setError("Conecta tu wallet MetaMask para continuar."); return; }
+    if (!isPatient) { setError("Necesitas completar tu registro como paciente antes de agendar una cita. Ve a tu perfil y completa el onboarding."); return; }
     if (!doctorWalletAddress) { setError("El especialista no tiene wallet registrada."); return; }
     setError(null);
     setBusy(true);
@@ -477,7 +716,12 @@ function BookingModal({
                 <span className="text-xs text-porcelain/50">S/. {detail.consultationFeeSYS} / consulta</span>
               </div>
 
-              {!walletReady && (
+              {!isPatient && (
+                <div className="mb-3 text-sm text-soft-fawn bg-soft-fawn/10 border border-soft-fawn/30 rounded-lg px-3 py-2">
+                  ⚠️ Necesitas completar tu <strong>registro como paciente</strong> para agendar citas. Ve a tu perfil y completa el onboarding.
+                </div>
+              )}
+              {!walletReady && isPatient && (
                 <div className="mb-3 text-sm text-soft-fawn bg-soft-fawn/10 border border-soft-fawn/30 rounded-lg px-3 py-2">
                   Conecta tu wallet MetaMask para agendar.
                 </div>
@@ -605,7 +849,7 @@ function PaymentScreen({
         : "bg-danger/10 border-danger/40 text-danger";
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="max-w-md mx-auto">
         <h1 className="text-lg font-semibold mb-1">Pago de la cita</h1>
         <p className="text-sm text-porcelain/50 mb-4">Red: Syscoin (testnet)</p>

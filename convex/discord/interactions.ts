@@ -132,15 +132,36 @@ export const processCommand = internalAction({
           }
 
           const profile = await ctx.runQuery(internal.discord.handlers._findProfileByDiscordId, { discordId: userId });
+
+          // Bloquear IA si el usuario no ha vinculado su cuenta
+          if (!profile) {
+            await replyViaDM(appId, token, botToken, userId, {
+              embeds: [simpleEmbed(
+                "❌ Cuenta no vinculada",
+                `Para usar SEPH-AI debes vincular tu cuenta de Discord en SEPHIEM.\n\n` +
+                `**Cómo hacerlo:**\n1. Ingresa al [Portal SEPHIEM](https://sephiem.vercel.app)\n` +
+                `2. Ve a **Configuración → Discord**\n3. Pega tu Discord ID\n\n` +
+                `Tu Discord ID: \`${userId}\``,
+                COLOR.orange,
+              )],
+            }, fromDM);
+            return;
+          }
+
+          const patient = await ctx.runQuery(internal.discord.handlers._getPatientByProfileId, { profileId: profile._id });
           let contextSummary: string | undefined;
           let promptVersion: string | undefined;
+          let history: Array<{ role: "user" | "assistant"; content: string }> | undefined;
 
-          if (profile) {
-            const patient = await ctx.runQuery(internal.discord.handlers._getPatientByProfileId, { profileId: profile._id });
-            if (patient) {
-              const state = await ctx.runQuery(internal.discord.handlers._getHermesContext, { patientId: patient._id });
-              contextSummary = state?.contextSummary;
-              promptVersion  = state?.promptVersion;
+          if (patient) {
+            const [clinicalCtx, hermesState] = await Promise.all([
+              ctx.runQuery(internal.discord.handlers._getPatientClinicalContext, { patientId: patient._id }),
+              ctx.runQuery(internal.discord.handlers._getHermesContext, { patientId: patient._id }),
+            ]);
+            contextSummary = clinicalCtx.contextSummary || undefined;
+            promptVersion  = clinicalCtx.promptVersion;
+            if (hermesState?.discordHistory && hermesState.discordHistory.length > 0) {
+              history = hermesState.discordHistory;
             }
           }
 
@@ -148,21 +169,25 @@ export const processCommand = internalAction({
             message: pregunta,
             contextSummary,
             promptVersion,
+            history,
           });
 
-          const fields: Array<{ name: string; value: string; inline?: boolean }> = [
-            { name: "Tu consulta", value: `> ${pregunta.slice(0, 200)}`, inline: false },
-          ];
-          if (!profile) {
-            fields.push({
-              name: "⚠️ Cuenta no vinculada",
-              value: "Respuesta general. Vincula tu cuenta en el portal → Configuración → Discord.",
-              inline: false,
+          if (patient) {
+            await ctx.runMutation(internal.discord.handlers._saveDiscordHistory, {
+              patientId: patient._id,
+              userMessage: pregunta,
+              assistantReply: reply,
             });
           }
 
           await replyViaDM(appId, token, botToken, userId, {
-            embeds: [{ title: "🤖 SEPH-AI — Asistente Médico", description: reply, color: COLOR.green, fields, footer: { text: "SEPHIEM • Plataforma Clínica Web3" } }],
+            embeds: [{
+              title: "🤖 SEPH-AI — Asistente Médico",
+              description: reply,
+              color: COLOR.green,
+              fields: [{ name: "Tu consulta", value: `> ${pregunta.slice(0, 200)}`, inline: false }],
+              footer: { text: "SEPHIEM • Plataforma Clínica Web3" },
+            }],
           }, fromDM);
           break;
         }
@@ -173,7 +198,7 @@ export const processCommand = internalAction({
 
           if (!profile) {
             await replyViaDM(appId, token, botToken, userId, {
-              embeds: [simpleEmbed("❌ Cuenta no vinculada", "Inicia sesión en el portal → Configuración → Discord.", COLOR.orange)],
+              embeds: [simpleEmbed("❌ Cuenta no vinculada", `Inicia sesión en [SEPHIEM Portal](https://sephiem.vercel.app) → Configuración → Discord.\nTu Discord ID: \`${userId}\``, COLOR.orange)],
             }, fromDM);
             return;
           }
@@ -217,7 +242,7 @@ export const processCommand = internalAction({
 
           if (!profile) {
             await replyViaDM(appId, token, botToken, userId, {
-              embeds: [simpleEmbed("❌ Cuenta no vinculada", "Inicia sesión en el portal → Configuración → Discord.", COLOR.orange)],
+              embeds: [simpleEmbed("❌ Cuenta no vinculada", `Inicia sesión en [SEPHIEM Portal](https://sephiem.vercel.app) → Configuración → Discord.\nTu Discord ID: \`${userId}\``, COLOR.orange)],
             }, fromDM);
             return;
           }
@@ -255,7 +280,7 @@ export const processCommand = internalAction({
 
           if (!profile) {
             await replyViaDM(appId, token, botToken, userId, {
-              embeds: [simpleEmbed("❌ Sin vincular", "Tu Discord **no está vinculado** a SEPHIEM.\nInicia sesión en el portal → Configuración → Discord.", COLOR.orange)],
+              embeds: [simpleEmbed("❌ Sin vincular", `Tu Discord **no está vinculado** a SEPHIEM.\nInicia sesión en [SEPHIEM Portal](https://sephiem.vercel.app) → Configuración → Discord.\nTu Discord ID: \`${userId}\``, COLOR.orange)],
             }, fromDM);
             return;
           }

@@ -156,7 +156,7 @@ http.route({
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let body: { userId?: string; username?: string; message?: string };
+    let body: { userId?: string; message?: string };
     try {
       body = await request.json() as typeof body;
     } catch {
@@ -173,19 +173,37 @@ http.route({
       discordId: userId,
     });
 
+    // Bloquear IA si el usuario no ha vinculado su cuenta
+    if (!profile) {
+      return Response.json({
+        reply:
+          "❌ **Tu cuenta de Discord no está vinculada a SEPHIEM.**\n\n" +
+          "Para hablar con SEPH-AI necesitas vincular tu cuenta:\n" +
+          "1. Ingresa al portal: https://sephiem.vercel.app\n" +
+          "2. Ve a **Configuración → Discord**\n" +
+          "3. Pega tu Discord ID\n\n" +
+          `Tu Discord ID es: \`${userId}\``,
+        linked: false,
+      });
+    }
+
+    const patient = await ctx.runQuery(internal.discord.handlers._getPatientByProfileId, {
+      profileId: profile._id,
+    });
+
     let contextSummary: string | undefined;
     let promptVersion: string | undefined;
+    let history: Array<{ role: "user" | "assistant"; content: string }> | undefined;
 
-    if (profile) {
-      const patient = await ctx.runQuery(internal.discord.handlers._getPatientByProfileId, {
-        profileId: profile._id,
-      });
-      if (patient) {
-        const state = await ctx.runQuery(internal.discord.handlers._getHermesContext, {
-          patientId: patient._id,
-        });
-        contextSummary = state?.contextSummary;
-        promptVersion = state?.promptVersion;
+    if (patient) {
+      const [clinicalCtx, hermesState] = await Promise.all([
+        ctx.runQuery(internal.discord.handlers._getPatientClinicalContext, { patientId: patient._id }),
+        ctx.runQuery(internal.discord.handlers._getHermesContext, { patientId: patient._id }),
+      ]);
+      contextSummary = clinicalCtx.contextSummary || undefined;
+      promptVersion  = clinicalCtx.promptVersion;
+      if (hermesState?.discordHistory && hermesState.discordHistory.length > 0) {
+        history = hermesState.discordHistory;
       }
     }
 
@@ -193,9 +211,18 @@ http.route({
       message,
       contextSummary,
       promptVersion,
+      history,
     });
 
-    return Response.json({ reply, linked: !!profile });
+    if (patient) {
+      await ctx.runMutation(internal.discord.handlers._saveDiscordHistory, {
+        patientId: patient._id,
+        userMessage: message,
+        assistantReply: reply,
+      });
+    }
+
+    return Response.json({ reply, linked: true });
   }),
 });
 
@@ -365,6 +392,106 @@ http.route({
         ? `✅ Cuenta vinculada a SEPHIEM como **${profile.name}**.\nTus consultas incluirán tu historial clínico.`
         : `⚠️ Cuenta vinculada como **${profile.name}** pero sin perfil clínico activo.\nCompleta tu onboarding en el portal.`,
     });
+  }),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Discord: /api/discord/welcome — nuevo miembro se une al servidor
+// El bot llama este endpoint desde el evento on_member_join (Gateway).
+// Envía un DM con bienvenida y lista de comandos válidos.
+// ─────────────────────────────────────────────────────────────────────────────
+
+http.route({
+  path: "/api/discord/welcome",
+  method: "POST",
+  handler: httpAction(async (_ctx, request) => {
+    if (!verifyBotSecret(request)) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    let body: { userId?: string; username?: string };
+    try {
+      body = await request.json() as typeof body;
+    } catch {
+      return Response.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+
+    const { userId, username } = body;
+    if (!userId) {
+      return Response.json({ error: "Missing userId" }, { status: 400 });
+    }
+
+    const botToken = process.env.DISCORD_BOT_TOKEN ?? "";
+    if (!botToken) {
+      return Response.json({ error: "Bot token not configured" }, { status: 500 });
+    }
+
+    const welcomeEmbed = {
+      title: "👋 ¡Bienvenido/a a SEPHIEM!",
+      description:
+        `Hola **${username ?? "nuevo miembro"}**, somos una plataforma de gestión clínica Web3.\n\n` +
+        "Aquí puedes consultar al asistente médico SEPH-AI, revisar tus citas y hacer seguimiento de tu salud.",
+      color: 0x2351d8,
+      fields: [
+        {
+          name: "📋 Comandos disponibles",
+          value:
+            "`/salud <pregunta>` — consulta al asistente SEPH-AI\n" +
+            "`/cita` — ver tu próxima cita médica\n" +
+            "`/checkin [estado]` — registro diario de salud\n" +
+            "`/estado` — verificar tu vinculación con SEPHIEM\n" +
+            "`/ayuda` — mostrar este mensaje",
+          inline: false,
+        },
+        {
+          name: "🔗 Vincula tu cuenta",
+          value:
+            "Para acceder a tu historial clínico personalizado, ingresa al portal y vincula tu Discord:\n" +
+            "**Portal → Configuración → Discord → pega tu ID**",
+          inline: false,
+        },
+        {
+          name: "🔒 Privacidad",
+          value: "Las respuestas médicas se envían por DM — nadie más las ve en el canal.",
+          inline: false,
+        },
+      ],
+      footer: { text: "SEPHIEM • Plataforma Clínica Web3" },
+    };
+
+    // Crear canal DM con el nuevo miembro
+    try {
+      const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+        method: "POST",
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ recipient_id: userId }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!dmRes.ok) {
+        return Response.json({ ok: false, reason: "Cannot open DM channel" });
+      }
+
+      const dm = await dmRes.json() as { id: string };
+
+      const msgRes = await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ embeds: [welcomeEmbed] }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      return Response.json({ ok: msgRes.ok });
+    } catch (err) {
+      console.error("[discord/welcome] error:", err);
+      return Response.json({ ok: false, reason: "Network error" }, { status: 500 });
+    }
   }),
 });
 

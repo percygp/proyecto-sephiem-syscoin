@@ -48,3 +48,4 @@ proyecto-sephiem-syscoin/**/node_modules
 proyecto-sephiem-syscoin/*.pdf
 proyecto-sephiem-syscoin/contracts/artifacts/
 proyecto-sephiem-syscoin/contracts/cache/
+.vercel

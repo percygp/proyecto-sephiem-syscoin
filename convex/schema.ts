@@ -435,6 +435,10 @@ export default defineSchema({
     promptVersion: v.string(),
     totalInteractions: v.number(),
     updatedAt: v.number(),
+    discordHistory: v.optional(v.array(v.object({
+      role: v.union(v.literal("user"), v.literal("assistant")),
+      content: v.string(),
+    }))),
   })
     .index("by_patientId", ["patientId"])
     .index("by_alertLevel", ["alertLevel"]),
@@ -673,6 +677,7 @@ export default defineSchema({
     jurisdiction: v.string(),
     walletAddress: v.string(),
     isVerifiedByAdmin: v.boolean(),
+    isVerifiedOnChain: v.optional(v.boolean()),
     specialty: v.string(),
     description: v.optional(v.string()),
     consultationFeeSYS: v.string(),
